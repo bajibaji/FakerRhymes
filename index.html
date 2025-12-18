@@ -289,18 +289,9 @@
 					<label class="small" for="looseness">韵脚宽松度（0=严格，1=最松）</label>
 					<input type="range" id="looseness" min="0" max="1" step="0.05" value="0.15" />
 				</div>
-				<div class="hint">0 严格同韵同调；≥0.34 合并前后鼻音（ang/an、iang/ian 等）仍保留声调；≥0.67 进一步允许 iang/ang 合并并忽略声调。</div>
+				<div class="hint">0 严格：同韵同调；0.34-0.66 中等：韵母放宽（前后鼻音等）但声调相同；≥0.67 最松：进一步放宽韵母（iang/ang等），最后才忽略声调。</div>
 			</section>
 
-			<section class="panel">
-				<div id="matchedResults" style="padding: 12px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 8px; display: none;">
-					<div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-2);">匹配结果：</div>
-					<div id="matchedResultsList" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
-				</div>
-				<div id="dictStatus" style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
-					<span id="dictStatusText"></span>
-				</div>
-			</section>
 		</main>
 
 		<section class="panel" style="margin: 0 32px 20px;">
@@ -316,6 +307,16 @@
 				</thead>
 				<tbody id="detailBody"></tbody>
 			</table>
+		</section>
+
+		<section class="panel" style="margin: 0 32px 20px;">
+			<div id="matchedResults" style="padding: 12px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 8px; display: none;">
+				<div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-2);">匹配结果：</div>
+				<div id="matchedResultsList" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+			</div>
+			<div id="dictStatus" style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
+				<span id="dictStatusText"></span>
+			</div>
 		</section>
 
 		<div class="footer">基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
@@ -434,10 +435,10 @@
 			['iang', 'ang']
 		];
 
-		// 松紧分级：
-		// 0（严格）：同韵同调
-		// 1（中等）：前后鼻音合并（如 ang/an, iang/ian），仍保留声调
-		// 2（最松）：在中等基础上允许 iang/ang 合并，且忽略声调
+		// 松紧分级（声调优先）：
+		// 0（严格）：声调完全相同 + 韵母完全相同
+		// 0.5（中等）：声调完全相同 + 韵母允许前后鼻音合并（ang/an、iang/ian等）
+		// 1（最松）：声调相同 + 韵母进一步合并（iang/ang），若找不到再忽略声调
 		const getLoosenessTier = (value) => {
 			if (value >= 0.67) return 2;
 			if (value >= 0.34) return 1;
@@ -540,16 +541,24 @@
 			let targetTones = [];
 			if (forceTone !== null) {
 				targetTones = [Number(forceTone)];
-			} else if (tier >= 2) {
-				targetTones = [1, 2, 3, 4]; // 最松：忽略声调
 			} else {
-				targetTones = [originalTone]; // 严格/中等：保持原声调
+				// 声调优先：0和1都保持原声调，2才会尝试放开
+				targetTones = [originalTone];
 			}
 
 			const candidates = [];
 			for (const f of finalsToTry) {
 				for (const t of targetTones) {
 					candidates.push(...(bankMap.get(`${f}-${t}`) || []));
+				}
+			}
+
+			// 如果最松档且没有结果，才尝试忽略声调
+			if (candidates.length === 0 && tier >= 2 && !forceTone) {
+				for (const f of finalsToTry) {
+					for (let t = 1; t <= 4; t++) {
+						candidates.push(...(bankMap.get(`${f}-${t}`) || []));
+					}
 				}
 			}
 
@@ -573,14 +582,23 @@
 			// Build new infos but preserve locked/forced settings from previous run
 			const oldInfos = Array.isArray(currentInfos) ? currentInfos.slice() : [];
 			
-			// 先提取所有字符的拼音信息
+			// 先提取所有字符的拼音信息，记录基准声调
 			const tempInfos = Array.from(src).map((ch) => {
 				const info = toInfo(ch);
-				return info || { char: ch, raw: '-', tone: '-', fin: '-' };
+				if (!info) return { char: ch, raw: '-', tone: '-', baseTone: '-', fin: '-', forcedTone: null };
+				return { ...info, baseTone: info.tone, forcedTone: null };
+			});
+
+			// 应用用户在解析表中选择的强制声调
+			const tempInfosWithOverrides = tempInfos.map((info, idx) => {
+				const old = oldInfos[idx];
+				const forcedTone = old && old.forcedTone !== null ? old.forcedTone : null;
+				const tone = forcedTone !== null ? forcedTone : info.baseTone;
+				return { ...info, tone, forcedTone };
 			});
 			
 			// 尝试从字典查询整句
-			const dictResult = queryDict(tempInfos);
+			const dictResult = queryDict(tempInfosWithOverrides);
 			
 			// 显示匹配结果
 			const matchedResults = document.getElementById('matchedResults');
@@ -613,7 +631,7 @@
 				// 为每个字符位置生成候选项列表
 				const firstPhrase = Array.from(dictResult[0]); // 第一个结果作为默认结果
 				
-				newInfos = tempInfos.map((info, idx) => {
+				newInfos = tempInfosWithOverrides.map((info, idx) => {
 					// 保留锁定状态
 					if (oldInfos[idx] && oldInfos[idx].locked) {
 						return { 
@@ -647,14 +665,14 @@
 						generated: selectedChar, 
 						candidates: charCandidates,
 						locked: false, 
-						forcedTone: null 
+						forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
 					};
 				});
 			} else {
 				// 字典查询失败,使用原逻辑
-				newInfos = tempInfos.map((info, idx) => {
+				newInfos = tempInfosWithOverrides.map((info, idx) => {
 					if (info.fin === '-') {
-						return { ...info, generated: info.char, locked: false, forcedTone: null };
+						return { ...info, generated: info.char, locked: false, forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null };
 					}
 					// 保留锁定状态
 					if (oldInfos[idx] && oldInfos[idx].locked) {
@@ -670,7 +688,7 @@
 						...info, 
 						generated: candidate || info.char, 
 						locked: false, 
-						forcedTone: null 
+						forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
 					};
 				});
 			}
@@ -686,11 +704,9 @@
 			const looseness = Number(document.getElementById('looseness').value);
 			// allow explicit user tone change even if locked (user-initiated)
 			info.forcedTone = newTone;
+			info.tone = newTone !== null ? newTone : info.baseTone;
 			const candidate = pickFromMap(info.fin, info.tone, looseness, newTone);
 			info.generated = candidate || info.char;
-			
-			// Auto lock after adjusting tone
-			info.locked = true;
 			
 			// Re-run process with updated tone
 			process();
@@ -750,41 +766,6 @@
 					});
 					
 					td4.appendChild(select);
-					
-					const lockBtn = document.createElement('button');
-					lockBtn.className = `lock-btn ${i.locked ? 'locked' : ''}`;
-					lockBtn.dataset.index = index;
-					lockBtn.textContent = i.locked ? '🔒' : '🔓';
-					lockBtn.title = i.locked ? '已锁定：不会被自动替换' : '未锁定：点击锁定此位置';
-					lockBtn.style.marginLeft = '6px';
-					lockBtn.style.background = 'transparent';
-					lockBtn.style.border = 'none';
-					lockBtn.style.color = 'var(--text)';
-					lockBtn.style.padding = '0';
-					lockBtn.style.borderRadius = '0';
-					lockBtn.style.cursor = 'pointer';
-					lockBtn.style.fontSize = '12px';
-					lockBtn.style.lineHeight = '1';
-					
-					lockBtn.addEventListener('click', (e) => {
-						e.preventDefault();
-						const idx = Number(lockBtn.dataset.index);
-						if (isNaN(idx) || !currentInfos[idx]) return;
-						const info = currentInfos[idx];
-						info.locked = !info.locked;
-						lockBtn.classList.toggle('locked', info.locked);
-						lockBtn.textContent = info.locked ? '🔒' : '🔓';
-						lockBtn.title = info.locked ? '已锁定：不会被自动替换' : '未锁定：点击锁定此位置';
-						if (!info.locked) {
-							const looseness = Number(document.getElementById('looseness').value);
-							const candidate = pickFromMap(info.fin, info.tone, looseness, info.forcedTone || null);
-							info.generated = candidate || info.char;
-
-							render(currentInfos, currentInfos.map((i) => i.generated).join(''));
-						}
-					});
-					
-					td4.appendChild(lockBtn);
 				}
 				tr.appendChild(td4);
 				
@@ -913,9 +894,11 @@
 			});
 
 			const loosenInput = document.getElementById('looseness');
-			loosenInput.addEventListener('input', () => {
+			const triggerRecalc = () => {
 				if (document.getElementById('source').value.trim()) process();
-			});
+			};
+			loosenInput.addEventListener('input', triggerRecalc);
+			loosenInput.addEventListener('change', triggerRecalc);
 
 			const loadDictBtn = document.getElementById('loadDictBtn');
 			loadDictBtn.addEventListener('click', loadOnlineDict);
