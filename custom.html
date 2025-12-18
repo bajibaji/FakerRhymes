@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自定义词库管理</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --card: #0b1220;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #7c3aed;
+      --accent-2: #22d3ee;
+      --border: #1f2937;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.2), transparent 35%),
+        radial-gradient(circle at 80% 10%, rgba(34, 211, 238, 0.2), transparent 30%),
+        radial-gradient(circle at 50% 80%, rgba(56, 189, 248, 0.15), transparent 35%),
+        var(--bg);
+      color: var(--text);
+      font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px 64px;
+    }
+
+    .shell {
+      width: min(800px, 100%);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+      padding: 28px 28px 20px;
+    }
+
+    h1 { margin: 0 0 6px; font-size: 26px; }
+    p.subtitle { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+
+    textarea {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      color: var(--text);
+      font-size: 15px;
+      min-height: 160px;
+      resize: vertical;
+      outline: none;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+    }
+
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+
+    .btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border: none;
+      color: white;
+      padding: 11px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 15px 30px rgba(124, 58, 237, 0.35); }
+    .btn:active { transform: translateY(0); }
+
+    .btn.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+
+    .btn.ghost:hover { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2); }
+
+    .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .list { margin-top: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-height: 80px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(34, 211, 238, 0.12); color: #a5f3fc; border: 1px solid rgba(34, 211, 238, 0.35); margin: 4px; font-size: 13px; }
+    .footer { color: var(--muted); font-size: 12px; margin-top: 12px; }
+    .export-box { margin-top: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-size: 12px; color: var(--muted); word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <h1>自定义词库</h1>
+    <p class="subtitle">填入要参与押韵的自定义词或单字，空格/逗号/换行分隔。会保存在浏览器本地并被主页自动加载。</p>
+
+    <textarea id="input" placeholder="示例：北京 程序员 飞"></textarea>
+    <div class="hint">添加规则：多字词会被拆成单字参与押韵；保存后数据存入 localStorage（不会上传）。</div>
+
+    <div class="controls">
+      <button class="btn" id="save" type="button" onclick="handleSave()">保存到浏览器</button>
+      <button class="btn ghost" id="clear" type="button" onclick="handleClear()">清空自定义</button>
+      <button class="btn ghost" id="back" type="button" onclick="location.href='index.html'">返回生成器</button>
+      <button class="btn ghost" id="export" type="button" onclick="handleExport()">导出 data.js 片段</button>
+    </div>
+
+    <div class="list" id="current"></div>
+    <div class="export-box" id="exportBox" style="display:none;"></div>
+    <div class="hint" id="status"></div>
+
+    <div class="footer">存储键：CUSTOM_RHYME_BANK。主页会读取并合并至字库。</div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'CUSTOM_RHYME_BANK';
+    let memoryStore = [];
+
+    const status = (msg) => {
+      document.getElementById('status').textContent = msg;
+      console.log('[custom]', msg);
+    };
+
+    const storageAvailable = () => {
+      try {
+        const t = '__TEST__';
+        localStorage.setItem(t, '1');
+        localStorage.removeItem(t);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const parseInput = (text) => {
+      return text
+        .replace(/[，,；;\n\r\t]+/g, ' ')
+        .split(' ')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    };
+
+    const loadList = () => {
+      if (!storageAvailable()) return [...memoryStore];
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr.filter(Boolean) : [];
+      } catch (e) {
+        status('读取 localStorage 失败，改用内存存储。');
+        return [...memoryStore];
+      }
+    };
+
+    const saveList = (list) => {
+      const uniq = Array.from(new Set(list));
+      if (!storageAvailable()) {
+        memoryStore = uniq;
+        status('当前环境不可写入 localStorage，已暂存于内存（刷新后会丢失）');
+        return uniq;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(uniq));
+      status('已写入 localStorage');
+      return uniq;
+    };
+
+    const renderList = () => {
+      const box = document.getElementById('current');
+      const list = loadList();
+      if (!list.length) {
+        box.textContent = '当前无自定义词';
+        return;
+      }
+      box.innerHTML = '';
+      list.forEach((w) => {
+        const span = document.createElement('span');
+        span.className = 'pill';
+        span.textContent = w;
+        box.appendChild(span);
+      });
+    };
+
+    function handleSave() {
+      console.log('保存按钮被点击');
+      const text = document.getElementById('input').value;
+      const parts = parseInput(text);
+      if (!parts.length) {
+        alert('请输入至少一个词/字');
+        return;
+      }
+      saveList(parts.concat(loadList()));
+      document.getElementById('input').value = '';
+      renderList();
+      alert('已保存到浏览器，返回主页即可生效');
+    }
+
+    function handleClear() {
+      console.log('清空按钮被点击');
+      if (!confirm('确认清空自定义词库？')) return;
+      if (storageAvailable()) localStorage.removeItem(STORAGE_KEY);
+      memoryStore = [];
+      renderList();
+      status('已清空');
+    }
+
+    function handleExport() {
+      console.log('导出按钮被点击');
+      const list = loadList();
+      const box = document.getElementById('exportBox');
+      if (!list.length) {
+        box.style.display = 'block';
+        box.textContent = '当前无自定义词可导出。';
+        return;
+      }
+      const snippet = '// 追加到 data.js 中的 customBank\nconst customBank = [\n  \'' + list.join('\',\n  \'') + '\'\n];';
+      box.style.display = 'block';
+      box.textContent = snippet;
+    }
+
+    const init = () => {
+      try {
+        console.log('开始初始化');
+        renderList();
+        status(storageAvailable() ? 'localStorage 可用，数据会持久保存于浏览器' : 'localStorage 不可用，将使用内存存储，刷新后会丢失');
+        console.log('初始化完成');
+      } catch (e) {
+        alert('初始化失败，请查看控制台');
+        console.error('初始化错误:', e);
+      }
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>

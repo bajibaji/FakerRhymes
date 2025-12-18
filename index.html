@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>中文押韵生成器</title>
+	<link rel="preconnect" href="https://unpkg.com" />
+	<style>
+		:root {
+			--bg: #0f172a;
+			--panel: #111827;
+			--card: #0b1220;
+			--text: #e2e8f0;
+			--muted: #94a3b8;
+			--accent: #7c3aed;
+			--accent-2: #22d3ee;
+			--border: #1f2937;
+			--radius: 16px;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			min-height: 100vh;
+			background: radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.2), transparent 35%),
+				radial-gradient(circle at 80% 10%, rgba(34, 211, 238, 0.2), transparent 30%),
+				radial-gradient(circle at 50% 80%, rgba(56, 189, 248, 0.15), transparent 35%),
+				var(--bg);
+			color: var(--text);
+			font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 40px 16px 64px;
+		}
+
+		.shell {
+			width: min(1000px, 100%);
+			background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+			overflow: hidden;
+		}
+
+		header {
+			padding: 28px 32px 12px;
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 28px;
+			letter-spacing: 0.4px;
+		}
+
+		p.subtitle {
+			margin: 8px 0 0;
+			color: var(--muted);
+			font-size: 14px;
+		}
+
+		main {
+			display: grid;
+			grid-template-columns: 1.1fr 0.9fr;
+			gap: 20px;
+			padding: 0 32px 28px;
+		}
+
+		@media (max-width: 900px) {
+			main {
+				grid-template-columns: 1fr;
+			}
+		}
+
+		.panel {
+			background: var(--panel);
+			border: 1px solid var(--border);
+			border-radius: calc(var(--radius) - 4px);
+			padding: 20px;
+			position: relative;
+			overflow: hidden;
+		}
+
+		.panel::before {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background: radial-gradient(circle at 30% 30%, rgba(124, 58, 237, 0.08), transparent 40%);
+			pointer-events: none;
+		}
+
+		label {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			font-weight: 600;
+			margin-bottom: 10px;
+		}
+
+		textarea,
+		input[type="text"] {
+			width: 100%;
+			background: var(--card);
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			padding: 14px;
+			color: var(--text);
+			font-size: 16px;
+			transition: border 0.2s ease, box-shadow 0.2s ease;
+			resize: vertical;
+			min-height: 120px;
+		}
+
+		textarea:focus,
+		input[type="text"]:focus {
+			border-color: var(--accent);
+			outline: none;
+			box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+		}
+
+		.controls {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+			margin-top: 12px;
+			align-items: center;
+		}
+
+		.btn {
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			border: none;
+			color: white;
+			padding: 12px 18px;
+			border-radius: 12px;
+			font-weight: 700;
+			cursor: pointer;
+			transition: transform 0.15s ease, box-shadow 0.15s ease;
+			box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
+		}
+
+		.btn:hover {
+			transform: translateY(-1px);
+			box-shadow: 0 15px 30px rgba(124, 58, 237, 0.35);
+		}
+
+		.btn:active {
+			transform: translateY(0);
+		}
+
+		.btn.ghost {
+			background: transparent;
+			color: var(--text);
+			border: 1px solid var(--border);
+			box-shadow: none;
+		}
+
+		.btn.ghost:hover {
+			border-color: var(--accent);
+			box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+		}
+
+		.hint {
+			color: var(--muted);
+			font-size: 12px;
+			margin-top: 6px;
+		}
+
+		.output {
+			font-size: 22px;
+			line-height: 1.6;
+			min-height: 120px;
+			word-break: break-all;
+			margin-bottom: 10px;
+		}
+
+		.badge-row {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-top: 10px;
+			font-size: 12px;
+			color: var(--muted);
+		}
+
+		.badge {
+			padding: 6px 10px;
+			border-radius: 999px;
+			background: rgba(124, 58, 237, 0.15);
+			border: 1px solid rgba(124, 58, 237, 0.35);
+			color: #d8b4fe;
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 13px;
+		}
+
+		th,
+		td {
+			border-bottom: 1px solid var(--border);
+			padding: 8px;
+			text-align: left;
+			color: var(--muted);
+		}
+
+		th {
+			color: var(--text);
+			font-weight: 700;
+		}
+
+		.pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 4px;
+			padding: 4px 10px;
+			border-radius: 10px;
+			background: rgba(34, 211, 238, 0.12);
+			color: #a5f3fc;
+			border: 1px solid rgba(34, 211, 238, 0.35);
+			font-weight: 600;
+			cursor: pointer;
+			user-select: none;
+			transition: all 0.2s ease;
+		}
+
+		.lock-btn {
+			background: transparent;
+			border: none;
+			color: var(--text);
+			padding: 0;
+			border-radius: 0;
+			cursor: pointer;
+			font-size: 12px;
+			line-height: 1;
+		}
+
+		.lock-btn.locked {
+			background: transparent;
+			border-color: transparent;
+		}
+
+		.pill:hover {
+			background: rgba(34, 211, 238, 0.2);
+			box-shadow: 0 0 10px rgba(34, 211, 238, 0.15);
+		}
+
+		.pill:active {
+			transform: scale(0.95);
+		}
+
+		.small {
+			font-size: 12px;
+			color: var(--muted);
+		}
+
+		.footer {
+			padding: 12px 32px 22px;
+			color: var(--muted);
+			font-size: 12px;
+		}
+	</style>
+</head>
+<body>
+	<div class="shell">
+		<header>
+			<h1>连续押同音调的韵脚生成器</h1>
+			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
+		</header>
+
+		<main>
+			<section class="panel">
+				<label for="source">
+					请输入要押韵的词语：
+				</label>
+				<textarea id="source" placeholder="示例：废壳"></textarea>
+
+				<div class="controls">
+					<button class="btn" id="go">生成押韵</button>
+					<a class="btn ghost" href="custom.html">自定义词库</a>
+					<button class="btn ghost" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
+					<label class="small" for="looseness">韵脚宽松度（0=严格，1=最松）</label>
+					<input type="range" id="looseness" min="0" max="1" step="0.05" value="0.15" />
+				</div>
+				<div class="hint">0 严格同韵同调；≥0.34 合并前后鼻音（ang/an、iang/ian 等）仍保留声调；≥0.67 进一步允许 iang/ang 合并并忽略声调。</div>
+			</section>
+
+			<section class="panel">
+				<div id="matchedResults" style="padding: 12px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 8px; display: none;">
+					<div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-2);">匹配结果：</div>
+					<div id="matchedResultsList" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+				</div>
+				<div id="dictStatus" style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
+					<span id="dictStatusText"></span>
+				</div>
+			</section>
+		</main>
+
+		<section class="panel" style="margin: 0 32px 20px;">
+			<label style="margin-bottom: 14px;">解析详情</label>
+			<table>
+				<thead>
+					<tr>
+						<th>原字</th>
+						<th>拼音</th>
+						<th>声调</th>
+						<th>韵母</th>
+					</tr>
+				</thead>
+				<tbody id="detailBody"></tbody>
+			</table>
+		</section>
+
+		<div class="footer">基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
+	</div>
+
+	<script src="./data.js"></script>
+	<script>
+		const cdnList = [
+			'https://unpkg.com/pinyin-pro@3.27.0/dist/index.js',
+			'https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js',
+			// 如果需要本地备用，将 pinyin-pro.umd.js 放在同目录并取消下一行注释
+			// './pinyin-pro.umd.js'
+		];
+
+		const loadScriptSeq = (list, cb) => {
+			if (!list.length) return cb(new Error('全部 CDN 加载失败'));
+			const [url, ...rest] = list;
+			const s = document.createElement('script');
+			s.src = url;
+			s.onload = () => cb(null, url);
+			s.onerror = () => {
+				s.remove();
+				loadScriptSeq(rest, cb);
+			};
+			document.head.appendChild(s);
+		};
+
+		const setOutputStatus = (msg) => {
+			// Output element removed
+		};
+		const finals = [
+			'iong', 'uang', 'iang', 'ueng', 'uan', 'ian', 'uen', 'iao', 'uai', 'ang', 'eng', 'ing', 'ong', 'ai', 'ei', 'ao', 'ou', 'an', 'en', 'in', 'un', 'vn', 'ia', 'ua', 'uo', 'ie', 'ue', 'ui', 'er', 'a', 'o', 'e', 'i', 'u', 'v'
+		];
+
+		let bankMap = new Map();
+		let pinyinReady = false;
+		let currentInfos = [];
+		let dict = null; // 优化字典
+		let locks = [];
+
+		// 加载优化字典
+		const loadDict = async () => {
+			try {
+				const resp = await fetch('dict_optimized.json');
+				const text = await resp.text();
+				dict = JSON.parse(text);
+				console.log('字典加载成功,共', Object.keys(dict).length, '条');
+			} catch(e) {
+				console.error('字典加载失败:', e);
+			}
+		};
+
+		const normalize = (p) => p.replace(/\d/g, '');
+
+		const extractTone = (p) => {
+			const m = p.match(/(\d)/);
+			return m ? Number(m[1]) : 0;
+		};
+
+		const detectFinal = (p) => {
+			for (const f of finals) {
+				if (p.endsWith(f)) return f;
+			}
+			return null;
+		};
+
+		const toInfo = (char) => {
+			const raw = window.pinyinPro.pinyin(char, {
+				type: 'array',
+				toneType: 'num',
+				pattern: 'pinyin'
+			})[0];
+
+			if (!raw || /[a-z]/i.test(raw) === false) return null;
+
+			const clean = normalize(raw);
+			const tone = extractTone(raw);
+			const fin = detectFinal(clean);
+			return fin ? { char, raw, clean, tone, fin } : null;
+		};
+
+		const registerBank = () => {
+			if (!window.pinyinPro || !window.pinyinPro.pinyin) return new Map();
+			const source = typeof window.getRhymeBank === 'function' ? window.getRhymeBank() : window.RHYME_CHAR_BANK || [];
+			const map = new Map();
+			for (const item of source) {
+				// 将多字词拆成单个字符
+				const chars = Array.from(item);
+				for (const ch of chars) {
+					const info = toInfo(ch);
+					if (!info) continue;
+					const key = `${info.fin}-${info.tone}`;
+					if (!map.has(key)) map.set(key, []);
+					// 避免重复添加相同的字
+					if (!map.get(key).includes(ch)) {
+						map.get(key).push(ch);
+					}
+				}
+			}
+			return map;
+		};
+
+		const nasalPairs = [
+			['ang', 'an'],
+			['eng', 'en'],
+			['ing', 'in'],
+			['uan', 'an'],
+			['uai', 'ai'],
+			['iao', 'ao'],
+			['ai', 'ei'],
+			['an', 'ian'],
+			['iang', 'ian']
+		];
+
+		const looseExtraPairs = [
+			['iang', 'ang']
+		];
+
+		// 松紧分级：
+		// 0（严格）：同韵同调
+		// 1（中等）：前后鼻音合并（如 ang/an, iang/ian），仍保留声调
+		// 2（最松）：在中等基础上允许 iang/ang 合并，且忽略声调
+		const getLoosenessTier = (value) => {
+			if (value >= 0.67) return 2;
+			if (value >= 0.34) return 1;
+			return 0;
+		};
+
+		// 从字典查询拼音组合对应的词组（新算法）
+		// 使用最后两个字的韵脚为查询条件，返回所有相关匹配
+		const queryDict = (infos) => {
+			if (!dict || !infos || infos.length === 0) return null;
+			
+			// 获取最后两个字的韵脚
+			let lastTwoInfos = [];
+			if (infos.length >= 2) {
+				// 取最后两个字
+				lastTwoInfos = infos.slice(-2);
+			} else if (infos.length === 1) {
+				// 如果只有一个字，就用这一个字
+				lastTwoInfos = infos;
+			}
+			
+			// 验证韵脚信息的有效性
+			const validInfos = lastTwoInfos.filter(info => info.fin && info.fin !== '-');
+			if (validInfos.length === 0) return null;
+			
+			// 构建查询key
+			const keyParts = validInfos.map(info => `${info.fin}${info.tone}`);
+			const queryKey = keyParts.join('_');
+			
+			// 在字典中搜索所有可能的匹配
+			const matchedByWordCount = {};
+			const sourceLength = infos.length;
+			
+			// 遍历字典寻找匹配
+			for (const [dictKey, candidates] of Object.entries(dict)) {
+				// 检查查询key是否在dictKey中结尾匹配
+				if (dictKey.endsWith(queryKey)) {
+					if (candidates && Array.isArray(candidates)) {
+						for (const phrase of candidates) {
+							const phraseLen = Array.from(phrase).length;
+							
+							// 按字数分类
+							if (!matchedByWordCount[phraseLen]) {
+								matchedByWordCount[phraseLen] = [];
+							}
+							matchedByWordCount[phraseLen].push(phrase);
+						}
+					}
+				}
+			}
+			
+		// 返回顺序：
+		// 1. 先返回所有相同字数的匹配
+		// 2. 然后返回所有字数更多的匹配（按字数升序）
+		// 3. 不返回字数更少的匹配
+		let sortedLengths = Object.keys(matchedByWordCount).map(Number).sort((a, b) => a - b);
+		
+		const result = [];
+		
+		// 先添加相同字数的匹配
+		const sameLengthCandidates = sortedLengths.filter(len => len === sourceLength);
+		for (const len of sameLengthCandidates) {
+			result.push(...matchedByWordCount[len]);
+		}
+		
+		// 然后添加所有字数更多的匹配
+		const moreLengthCandidates = sortedLengths.filter(len => len > sourceLength);
+		for (const len of moreLengthCandidates) {
+			result.push(...matchedByWordCount[len]);
+		}
+		
+		return result.length > 0 ? result : null;
+	};
+
+		const buildFinalVariants = (fin, tier) => {
+			const variants = new Set([fin]);
+			if (tier >= 1) {
+				for (const [a, b] of nasalPairs) {
+					if (a === fin || b === fin) {
+						variants.add(a);
+						variants.add(b);
+					}
+				}
+			}
+			if (tier >= 2) {
+				for (const [a, b] of looseExtraPairs) {
+					if (a === fin || b === fin) {
+						variants.add(a);
+						variants.add(b);
+					}
+				}
+			}
+			return Array.from(variants);
+		};
+
+		const pickFromMap = (fin, originalTone, looseness, forceTone = null) => {
+			const tier = getLoosenessTier(looseness);
+			const finalsToTry = buildFinalVariants(fin, tier);
+
+			let targetTones = [];
+			if (forceTone !== null) {
+				targetTones = [Number(forceTone)];
+			} else if (tier >= 2) {
+				targetTones = [1, 2, 3, 4]; // 最松：忽略声调
+			} else {
+				targetTones = [originalTone]; // 严格/中等：保持原声调
+			}
+
+			const candidates = [];
+			for (const f of finalsToTry) {
+				for (const t of targetTones) {
+					candidates.push(...(bankMap.get(`${f}-${t}`) || []));
+				}
+			}
+
+			if (candidates.length === 0) return null;
+			return candidates[Math.floor(Math.random() * candidates.length)];
+		};
+
+		const process = () => {
+			const src = document.getElementById('source').value.trim();
+			const looseness = Number(document.getElementById('looseness').value);
+			if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
+				render([], 'pinyin-pro 未加载，请检查网络或稍后重试');
+				return;
+			}
+			if (bankMap.size === 0) bankMap = registerBank();
+			if (!src) {
+				render([], '等待输入...');
+				return;
+			}
+
+			// Build new infos but preserve locked/forced settings from previous run
+			const oldInfos = Array.isArray(currentInfos) ? currentInfos.slice() : [];
+			
+			// 先提取所有字符的拼音信息
+			const tempInfos = Array.from(src).map((ch) => {
+				const info = toInfo(ch);
+				return info || { char: ch, raw: '-', tone: '-', fin: '-' };
+			});
+			
+			// 尝试从字典查询整句
+			const dictResult = queryDict(tempInfos);
+			
+			// 显示匹配结果
+			const matchedResults = document.getElementById('matchedResults');
+			const matchedResultsList = document.getElementById('matchedResultsList');
+			if (dictResult && dictResult.length > 0) {
+				matchedResults.style.display = 'block';
+				matchedResultsList.innerHTML = '';
+				dictResult.forEach(phrase => {
+					const span = document.createElement('span');
+					span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
+					span.textContent = phrase;
+					matchedResultsList.appendChild(span);
+				});
+			} else {
+				matchedResults.style.display = 'none';
+			}
+			
+			if (dictResult) {
+				console.log('字典查询成功，找到匹配数:', dictResult.length);
+				console.log('dictResult:', dictResult);
+				console.log('dictResult[0] 类型:', typeof dictResult[0]);
+				console.log('dictResult[0] 值:', dictResult[0]);
+			}
+			
+			let newInfos;
+			// 检查 dictResult 是否是多个候选项（字符串数组）
+			if (dictResult && Array.isArray(dictResult) && dictResult.length > 0 && typeof dictResult[0] === 'string') {
+				// 字典查询成功，返回多个候选项
+				// dictResult 是一个字符串数组，每个字符串是一个候选词
+				// 为每个字符位置生成候选项列表
+				const firstPhrase = Array.from(dictResult[0]); // 第一个结果作为默认结果
+				
+				newInfos = tempInfos.map((info, idx) => {
+					// 保留锁定状态
+					if (oldInfos[idx] && oldInfos[idx].locked) {
+						return { 
+							...info, 
+							generated: oldInfos[idx].generated || info.char, 
+							candidates: [], // 锁定状态下不显示候选项
+							locked: true, 
+							forcedTone: oldInfos[idx].forcedTone || null 
+						};
+					}
+					
+					// 为这个位置的所有候选词收集第 idx 个字符
+					const charCandidates = [];
+					for (const phrase of dictResult) {
+						const chars = Array.from(phrase);
+						if (idx < chars.length) {
+							const char = chars[idx];
+							if (!charCandidates.includes(char)) {
+								charCandidates.push(char);
+							}
+						}
+					}
+					
+					console.log(`位置 ${idx}: candidates = ${JSON.stringify(charCandidates)}`);
+					
+					// 使用第一个查询结果的对应位置的字作为 generated
+					const selectedChar = idx < firstPhrase.length ? firstPhrase[idx] : (charCandidates[0] || info.char);
+					
+					return { 
+						...info, 
+						generated: selectedChar, 
+						candidates: charCandidates,
+						locked: false, 
+						forcedTone: null 
+					};
+				});
+			} else {
+				// 字典查询失败,使用原逻辑
+				newInfos = tempInfos.map((info, idx) => {
+					if (info.fin === '-') {
+						return { ...info, generated: info.char, locked: false, forcedTone: null };
+					}
+					// 保留锁定状态
+					if (oldInfos[idx] && oldInfos[idx].locked) {
+						return { 
+							...info, 
+							generated: oldInfos[idx].generated || info.char, 
+							locked: true, 
+							forcedTone: oldInfos[idx].forcedTone || null 
+						};
+					}
+					const candidate = pickFromMap(info.fin, info.tone, looseness);
+					return { 
+						...info, 
+						generated: candidate || info.char, 
+						locked: false, 
+						forcedTone: null 
+					};
+				});
+			}
+			
+			currentInfos = newInfos;
+			render(currentInfos, currentInfos.map((i) => i.generated).join(''));
+		};
+
+		const updateSingleChar = (index, newTone) => {
+			const info = currentInfos[index];
+			if (!info || !info.fin || info.fin === '-') return;
+			
+			const looseness = Number(document.getElementById('looseness').value);
+			// allow explicit user tone change even if locked (user-initiated)
+			info.forcedTone = newTone;
+			const candidate = pickFromMap(info.fin, info.tone, looseness, newTone);
+			info.generated = candidate || info.char;
+			
+			// Auto lock after adjusting tone
+			info.locked = true;
+			
+			// Re-run process with updated tone
+			process();
+		};
+
+		const render = (infos, text) => {
+			const body = document.getElementById('detailBody');
+			body.innerHTML = '';
+			infos.forEach((i, index) => {
+				const tr = document.createElement('tr');
+				
+				// 第一列：原字
+				const td1 = document.createElement('td');
+				td1.textContent = i.char;
+				tr.appendChild(td1);
+				
+				// 第二列：拼音
+				const td2 = document.createElement('td');
+				td2.textContent = i.raw || '-';
+				tr.appendChild(td2);
+				
+				// 第三列：声调
+				const td3 = document.createElement('td');
+				td3.textContent = i.tone || '-';
+				tr.appendChild(td3);
+				
+				// 第四列：韵母+声调控制
+				const td4 = document.createElement('td');
+				const finSpan = document.createElement('span');
+				finSpan.textContent = i.fin || '-';
+				td4.appendChild(finSpan);
+				
+				if (i.tone !== '-') {
+					const select = document.createElement('select');
+					select.className = 'tone-select';
+					select.dataset.index = index;
+					select.style.cssText = 'padding: 4px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text);';
+					
+					const opt0 = document.createElement('option');
+					opt0.value = '';
+					opt0.textContent = `原 (${i.tone})`;
+					opt0.selected = i.forcedTone === null;
+					select.appendChild(opt0);
+					
+					for (let tone = 1; tone <= 4; tone++) {
+						const opt = document.createElement('option');
+						opt.value = tone;
+						opt.textContent = `${tone}声`;
+						opt.selected = i.forcedTone == tone;
+						select.appendChild(opt);
+					}
+					
+					select.addEventListener('change', (e) => {
+						const idx = Number(e.target.dataset.index);
+						const val = e.target.value ? Number(e.target.value) : null;
+						updateSingleChar(idx, val);
+					});
+					
+					td4.appendChild(select);
+					
+					const lockBtn = document.createElement('button');
+					lockBtn.className = `lock-btn ${i.locked ? 'locked' : ''}`;
+					lockBtn.dataset.index = index;
+					lockBtn.textContent = i.locked ? '🔒' : '🔓';
+					lockBtn.title = i.locked ? '已锁定：不会被自动替换' : '未锁定：点击锁定此位置';
+					lockBtn.style.marginLeft = '6px';
+					lockBtn.style.background = 'transparent';
+					lockBtn.style.border = 'none';
+					lockBtn.style.color = 'var(--text)';
+					lockBtn.style.padding = '0';
+					lockBtn.style.borderRadius = '0';
+					lockBtn.style.cursor = 'pointer';
+					lockBtn.style.fontSize = '12px';
+					lockBtn.style.lineHeight = '1';
+					
+					lockBtn.addEventListener('click', (e) => {
+						e.preventDefault();
+						const idx = Number(lockBtn.dataset.index);
+						if (isNaN(idx) || !currentInfos[idx]) return;
+						const info = currentInfos[idx];
+						info.locked = !info.locked;
+						lockBtn.classList.toggle('locked', info.locked);
+						lockBtn.textContent = info.locked ? '🔒' : '🔓';
+						lockBtn.title = info.locked ? '已锁定：不会被自动替换' : '未锁定：点击锁定此位置';
+						if (!info.locked) {
+							const looseness = Number(document.getElementById('looseness').value);
+							const candidate = pickFromMap(info.fin, info.tone, looseness, info.forcedTone || null);
+							info.generated = candidate || info.char;
+
+							render(currentInfos, currentInfos.map((i) => i.generated).join(''));
+						}
+					});
+					
+					td4.appendChild(lockBtn);
+				}
+				tr.appendChild(td4);
+				
+				body.appendChild(tr);
+			});
+		};
+
+		const loadOnlineDict = async () => {
+			const btn = document.getElementById('loadDictBtn');
+			const originalText = btn.textContent;
+			btn.textContent = '⏳ 加载中...';
+			btn.disabled = true;
+
+			const dictSources = [
+				{
+					name: '本地优化词库',
+					url: './dict_optimized.json',
+					processor: (data) => {
+					const chars = new Set();
+					// Support multiple formats
+					if (Array.isArray(data)) {
+						// Array of strings or objects
+						data.forEach(item => {
+							if (typeof item === 'string') {
+								Array.from(item).forEach(ch => {
+									if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
+								});
+							} else if (item.word || item.char) {
+								const word = item.word || item.char;
+								Array.from(word).forEach(ch => {
+									if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
+								});
+							}
+						});
+					} else if (typeof data === 'object') {
+						// Object with character arrays by rhyme
+						Object.values(data).forEach(value => {
+							if (Array.isArray(value)) {
+								value.forEach(ch => {
+									if (typeof ch === 'string' && /[\u4e00-\u9fa5]/.test(ch)) {
+										chars.add(ch);
+									}
+								});
+							}
+						});
+					}
+					return Array.from(chars);
+				}
+				}
+			];
+		let loadedChars = null;
+		let successSource = null;
+		
+		for (const source of dictSources) {
+			try {
+				btn.textContent = `⏳ ${source.name}...`;
+				
+				const response = await fetch(source.url, { 
+					method: 'GET',
+					headers: { 'Accept': 'application/json' }
+				});
+				
+				if (!response.ok) throw new Error('HTTP ' + response.status);
+				
+				const data = await response.json();
+				const chars = source.processor(data);
+				
+				if (chars && chars.length > 0) {
+					loadedChars = chars;
+					successSource = source.name;
+					break;
+				}
+			} catch (err) {
+				console.warn(`${source.name} 加载失败:`, err);
+				continue;
+			}
+		}
+
+		if (!loadedChars || loadedChars.length === 0) {
+			throw new Error('所有词库源均加载失败');
+		}
+
+		try {
+			const chars = loadedChars;
+			localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars));
+			localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
+			localStorage.setItem('ONLINE_DICT_SOURCE', successSource);
+			
+			// Refresh bank
+			if (window.refreshRhymeBank) window.refreshRhymeBank();
+			bankMap = registerBank();
+			
+			btn.textContent = `✓ 已加载 ${chars.length} 字`;
+			btn.style.background = 'rgba(34, 211, 238, 0.2)';
+			
+			// Update status display
+			const dictStatus = document.getElementById('dictStatus');
+			const dictStatusText = document.getElementById('dictStatusText');
+			const date = new Date();
+			dictStatus.style.display = 'block';
+			dictStatusText.textContent = `📖 词库：${chars.length} 个汉字（${successSource}）| ${date.toLocaleString('zh-CN')}`;
+			
+			setTimeout(() => {
+				btn.innerHTML = `📚 已缓存 ${chars.length} 字`;
+				btn.disabled = false;
+				btn.style.background = '';
+			}, 2000);
+			
+		} catch (err) {
+			console.error('词库保存失败:', err);
+			btn.textContent = '✗ 保存失败';
+			btn.style.background = 'rgba(239, 68, 68, 0.2)';
+			
+			setTimeout(() => {
+				btn.textContent = originalText;
+				btn.disabled = false;
+				btn.style.background = '';
+			}, 2000);
+		}
+		};
+
+		const init = () => {
+			document.getElementById('go').addEventListener('click', process);
+			document.getElementById('source').addEventListener('keydown', (e) => {
+				if (e.ctrlKey && e.key === 'Enter') process();
+			});
+
+			const loosenInput = document.getElementById('looseness');
+			loosenInput.addEventListener('input', () => {
+				if (document.getElementById('source').value.trim()) process();
+			});
+
+			const loadDictBtn = document.getElementById('loadDictBtn');
+			loadDictBtn.addEventListener('click', loadOnlineDict);
+
+			// Check if online dict is already loaded
+			const updateDictStatus = () => {
+				const cachedTime = localStorage.getItem('ONLINE_DICT_TIME');
+				const dictStatus = document.getElementById('dictStatus');
+				const dictStatusText = document.getElementById('dictStatusText');
+				
+				if (cachedTime) {
+					const cached = localStorage.getItem('ONLINE_DICT_CACHE');
+					if (cached) {
+						try {
+							const chars = JSON.parse(cached);
+							const date = new Date(Number(cachedTime));
+							const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '在线词库';
+							loadDictBtn.innerHTML = `📚 已缓存 ${chars.length} 字`;
+							loadDictBtn.title = '点击重新加载词库';
+							
+							dictStatus.style.display = 'block';
+							dictStatusText.textContent = `📖 词库：${chars.length} 个汉字（${source}）| ${date.toLocaleString('zh-CN')}`;
+						} catch (e) {}
+					}
+				}
+			};
+			
+			updateDictStatus();
+
+			loadScriptSeq([...cdnList], (err, url) => {
+				if (err) {
+					setOutputStatus('pinyin-pro 未加载，已尝试备用 CDN。可手动下载 pinyin-pro.js 放在同目录。');
+					return;
+				}
+				pinyinReady = true;
+				bankMap = registerBank();
+				setOutputStatus(`pinyin-pro 已加载 (${url})，可点击生成。`);
+			});
+			
+			// 加载优化字典
+			loadDict();
+		};
+
+		init();
+	</script>
+</body>
+</html>
