@@ -448,7 +448,7 @@
 		// 从字典查询拼音组合对应的词组（新算法）
 		// 使用最后两个字的韵脚为查询条件，返回所有相关匹配
 		const queryDict = (infos) => {
-			if (!dict || !infos || infos.length === 0) return null;
+			if (!infos || infos.length === 0) return null;
 			
 			// 获取最后两个字的韵脚
 			let lastTwoInfos = [];
@@ -472,22 +472,57 @@
 			const matchedByWordCount = {};
 			const sourceLength = infos.length;
 			
-			// 遍历字典寻找匹配
-			for (const [dictKey, candidates] of Object.entries(dict)) {
-				// 检查查询key是否在dictKey中结尾匹配
-				if (dictKey.endsWith(queryKey)) {
-					if (candidates && Array.isArray(candidates)) {
-						for (const phrase of candidates) {
-							const phraseLen = Array.from(phrase).length;
-							
-							// 按字数分类
-							if (!matchedByWordCount[phraseLen]) {
-								matchedByWordCount[phraseLen] = [];
+			// 遍历优化字典寻找匹配
+			if (dict) {
+				for (const [dictKey, candidates] of Object.entries(dict)) {
+					// 检查查询key是否在dictKey中结尾匹配
+					if (dictKey.endsWith(queryKey)) {
+						if (candidates && Array.isArray(candidates)) {
+							for (const phrase of candidates) {
+								const phraseLen = Array.from(phrase).length;
+								
+								// 按字数分类
+								if (!matchedByWordCount[phraseLen]) {
+									matchedByWordCount[phraseLen] = [];
+								}
+								matchedByWordCount[phraseLen].push(phrase);
 							}
-							matchedByWordCount[phraseLen].push(phrase);
 						}
 					}
 				}
+			}
+			
+			// 也从自定义词库中查询
+			try {
+				const customStr = localStorage.getItem('CUSTOM_RHYME_BANK');
+				if (customStr) {
+					const customBank = JSON.parse(customStr);
+					if (Array.isArray(customBank)) {
+						for (const phrase of customBank) {
+							if (typeof phrase === 'string' && phrase.length > 0) {
+								// 检查自定义词是否以查询key结尾
+								const phraseInfos = Array.from(phrase).map(ch => toInfo(ch)).filter(Boolean);
+								if (phraseInfos.length > 0) {
+									const lastTwoPhrase = phraseInfos.length >= 2 ? phraseInfos.slice(-2) : phraseInfos;
+									const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
+									const phraseKey = phraseKeyParts.join('_');
+									
+									if (phraseKey === queryKey) {
+										const phraseLen = Array.from(phrase).length;
+										if (!matchedByWordCount[phraseLen]) {
+											matchedByWordCount[phraseLen] = [];
+										}
+										if (!matchedByWordCount[phraseLen].includes(phrase)) {
+											matchedByWordCount[phraseLen].push(phrase);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			} catch (e) {
+				console.warn('自定义词库读取失败:', e);
 			}
 			
 		// 返回顺序：
@@ -812,7 +847,7 @@
 							}
 						});
 					}
-					return Array.from(chars);
+					return Array.from(chars);啊
 				}
 				}
 			];
