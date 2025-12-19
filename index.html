@@ -397,7 +397,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.2 beta</h1>
+			<h1>连押同调韵脚生成器 v1.3 beta fixed</h1>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
 
@@ -629,17 +629,22 @@
 			if (['j', 'q', 'x', 'y'].includes(initial) && rest.startsWith('u')) {
 				rest = 'v' + rest.slice(1);
 			}
+
+			// --- 新增：i韵隔离协议 (Triple-I Isolation) ---
+			if (rest === 'i') {
+				if (['z', 'c', 's'].includes(initial)) {
+					return { initial, final: 'i-flat' }; // 平舌音
+				} else if (['zh', 'ch', 'sh', 'r'].includes(initial)) {
+					return { initial, final: 'i-retro' }; // 翘舌音
+				}
+				// 其他声母（b, p, m, d, t, n, l, j, q, x, y）保持为 'i'
+			}
+			// -------------------------------------------
 			
-			// 特殊处理：zi, ci, si, zhi, chi, shi, ri 的韵母在 pinyin-pro 中是 i
-			// 但为了兼容旧字典键值（如果存在），或者为了明确归类，这里我们直接返回 rest
-			// 注意：pinyin-pro 对 zi 返回 i，对 zu 返回 u。
-			// 之前的代码把 zu 也归为了 z-retroflex，这是错误的。
-			// 现在我们直接返回提取出的韵母，并在 buildFinalVariants 中处理归类。
+			// 如果没有韵母（比如 m, n, ng 自成音节），返回原拼音作为韵母
+			if (!rest) return { initial, final: normalizedP };
 			
-			// 如果没有韵母（比如 m, n, ng 自成音节），返回原拼音
-			if (!rest) return normalizedP;
-			
-			return rest;
+			return { initial, final: rest };
 		};
 
 		const toInfo = (char) => {
@@ -653,8 +658,8 @@
 
 			const clean = normalize(raw);
 			const tone = extractTone(raw);
-			const fin = detectFinal(clean);
-			return fin ? { char, raw, clean, tone, fin } : null;
+			const parts = detectFinal(clean);
+			return parts ? { char, raw, clean, tone, fin: parts.final, ini: parts.initial } : null;
 		};
 
 		const registerBank = () => {
@@ -686,7 +691,7 @@
 			{ name: '人辰辙', finals: ['en', 'in', 'un', 'vn', 'ün'] },
 			{ name: '江阳辙', finals: ['ang', 'iang', 'uang'] },
 			{ name: '中东辙', finals: ['eng', 'ing', 'ong', 'iong'] },
-			{ name: '一七辙', finals: ['i', 'v', 'er', 'ü'] },
+			{ name: '一七辙', finals: ['i', 'v', 'er', 'ü', 'i-flat', 'i-retro'] },
 			{ name: '姑苏辙', finals: ['u'] },
 			{ name: '怀来辙', finals: ['ai', 'uai'] },
 			{ name: '灰堆辙', finals: ['ei', 'ui', 'uei'] },
@@ -694,10 +699,10 @@
 			{ name: '油求辙', finals: ['ou', 'iu', 'iou'] }
 		];
 
-		// 松紧分级（声调优先）：
-		// 0（严格）：声调完全相同 + 韵母完全相同
-		// 0.5（中等）：声调完全相同 + 十三辙互押
-		// 1（最松）：在中等模式基础上，若找不到再忽略声调
+		// 松紧分级：
+		// 0（严格）：同韵同调（区分平翘舌、前后鼻音）
+		// 1（中等）：同调，但韵母放宽（不分平翘舌，不分前后鼻音）
+		// 2（最松）：韵母放宽（同上），且不限制声调
 		const getLoosenessTier = (value) => {
 			if (value >= 0.67) return 2;
 			if (value >= 0.34) return 1;
@@ -706,6 +711,8 @@
 
 		// 兼容旧字典键值的扩展映射
 		const legacyKeyMap = {
+			'i-flat': ['i'],
+			'i-retro': ['i'],
 			'i': [
 				'i', 
 				'z-retroflex', 'c-retroflex', 's-retroflex',
@@ -725,24 +732,18 @@
 		const queryDict = (infos, looseness) => {
 			if (!infos || infos.length === 0) return null;
 			
-			// 获取最后两个字的韵脚
-			let lastTwoInfos = [];
-			if (infos.length >= 2) {
-				// 取最后两个字
-				lastTwoInfos = infos.slice(-2);
-			} else if (infos.length === 1) {
-				// 如果只有一个字，就用这一个字
-				lastTwoInfos = infos;
-			}
+			// 修改：不再强制只取最后两个字，而是根据输入长度决定
+			// 用户要求：查询条件跟生成结果一样，字数由用户输入决定
+			let queryInfos = infos;
 			
 			// 验证韵脚信息的有效性
-			const validInfos = lastTwoInfos.filter(info => info.fin && info.fin !== '-');
+			const validInfos = queryInfos.filter(info => info.fin && info.fin !== '-');
 			if (validInfos.length === 0) return null;
 			
 			const tier = getLoosenessTier(looseness);
 			const allowToneRelax = tier >= 2;
 			
-			// 生成所有可能的查询键变体（仅在最松档对最后一字放宽声调，避免组合爆炸）
+			// 生成所有可能的查询键变体
 			const generateQueryKeys = (infos) => {
 				const keys = [];
 				const recurse = (index, current) => {
@@ -751,10 +752,11 @@
 						return;
 					}
 					const info = infos[index];
-					const isLast = index === infos.length - 1;
-					const toneVariants = allowToneRelax && isLast ? [1,2,3,4] : [info.tone];
+					// Tier 2: 所有字都允许声调放宽（因为只处理最后两个字，组合数可控）
+					// Tier 0/1: 必须严格匹配声调
+					const toneVariants = allowToneRelax ? [1,2,3,4] : [info.tone];
 					
-					// 获取该韵母的所有变体（十三辙）
+					// 获取该韵母的所有变体
 					const finVariants = buildFinalVariants(info.fin, tier);
 					
 					// 扩展为旧字典的键值
@@ -823,19 +825,24 @@
 								// 检查自定义词是否以查询key结尾
 								const phraseInfos = Array.from(phrase).map(ch => toInfo(ch)).filter(Boolean);
 								if (phraseInfos.length > 0) {
-									const lastTwoPhrase = phraseInfos.length >= 2 ? phraseInfos.slice(-2) : phraseInfos;
-													const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
-													const phraseKey = phraseKeyParts.join('_');
-													const phraseVariants = buildKeyVariants(phraseKey);
-													const hit = phraseVariants.some(v => queryVariantSet.has(v));
-									
-													if (hit) {
-										const phraseLen = Array.from(phrase).length;
-										if (!matchedByWordCount[phraseLen]) {
-											matchedByWordCount[phraseLen] = [];
-										}
-										if (!matchedByWordCount[phraseLen].includes(phrase)) {
-											matchedByWordCount[phraseLen].push(phrase);
+									// 修改：使用当前查询长度 infos.length，而不是硬编码的 2
+									const checkLen = infos.length;
+									if (phraseInfos.length >= checkLen) {
+										const targetInfos = phraseInfos.slice(-checkLen);
+										const phraseKeyParts = targetInfos.map(info => `${info.fin}${info.tone}`);
+										const phraseKey = phraseKeyParts.join('_');
+										const phraseVariants = buildKeyVariants(phraseKey);
+										
+										const hit = phraseVariants.some(v => queryVariantSet.has(v));
+						
+										if (hit) {
+											const phraseLen = Array.from(phrase).length;
+											if (!matchedByWordCount[phraseLen]) {
+												matchedByWordCount[phraseLen] = [];
+											}
+											if (!matchedByWordCount[phraseLen].includes(phrase)) {
+												matchedByWordCount[phraseLen].push(phrase);
+											}
 										}
 									}
 								}
@@ -898,64 +905,79 @@
 	};
 
 		const buildFinalVariants = (fin, tier) => {
-			// 查找该韵母属于哪个辙
+			// Tier 0: 严格模式，完全匹配
+			if (tier === 0) return [fin];
+
+			// Tier 1 & 2: 宽松模式 (合并平翘舌，合并前后鼻音)
+			
+			// 1. 前后鼻音合并：言前(an) + 江阳(ang)
+			const groupAnAng = ['an', 'ian', 'uan', 'van', 'üan', 'ang', 'iang', 'uang'];
+			if (groupAnAng.includes(fin)) return groupAnAng;
+
+			// 2. 前后鼻音合并：人辰(en) + 中东(eng)
+			const groupEnEng = ['en', 'in', 'un', 'vn', 'ün', 'eng', 'ing', 'ong', 'iong'];
+			if (groupEnEng.includes(fin)) return groupEnEng;
+
+			// 3. 其他情况（包括 i-flat/i-retro 归为一七辙），使用十三辙
 			const track = thirteenTracks.find(t => t.finals.includes(fin));
-			
-			// 如果找不到（可能是特殊韵母或未收录），返回自身
-			if (!track) return [fin];
-			
-			// Tier 0: 严格模式，只返回完全相同的韵母
-			// 但为了兼容性，如果用户想要同辙互押，可以调整这里。
-			// 既然用户强调十三辙，我们假设 Tier 1 才是十三辙互押。
-			if (tier === 0) {
-				return [fin];
-			}
-			
-			// Tier >= 1: 返回同辙的所有韵母
-			return track.finals;
+			return track ? track.finals : [fin];
 		};
 
 		const normalizeSpecialFinal = (fin) => {
-			// 旧逻辑残留，现在直接返回 fin 即可，或者为了兼容旧字典键值做映射
-			// 由于我们重构了 detectFinal，不再产生 -retroflex 等后缀
-			// 但如果字典里有旧键值，我们需要在这里处理吗？
-			// 不，这个函数是用来比较 source 和 phrase 的韵母是否一致的。
-			// 现在我们统一用十三辙判断。
+			// 旧逻辑残留，现在直接返回 fin 即可
 			return fin;
 		};
 
 		// 检查候选短语是否逐字匹配源词的韵脚（优先保证每个字的韵脚一致）
 		const phraseFitsSource = (phrase, sourceInfos, looseness) => {
 			const tier = getLoosenessTier(looseness);
-			const allowToneRelax = tier >= 2; // 仅在最松档才放开声调
+			const allowToneRelax = tier >= 2; // Tier 2 忽略声调
 			const chars = Array.from(phrase);
-			for (let i = 0; i < sourceInfos.length; i++) {
-				const src = sourceInfos[i];
-				const ch = chars[i];
+			
+			// 修改：始终从末尾对齐进行比较
+			// 无论是长词还是短词，都比较末尾对应的字
+			const len = Math.min(chars.length, sourceInfos.length);
+			const srcOffset = sourceInfos.length - len;
+			const phraseOffset = chars.length - len;
+
+			// 定义特殊声母集合（平翘舌）
+			const specialInitials = ['zh', 'ch', 'sh', 'r', 'z', 'c', 's'];
+
+			for (let i = 0; i < len; i++) {
+				const src = sourceInfos[srcOffset + i];
+				const ch = chars[phraseOffset + i];
 				const pInfo = ch ? toInfo(ch) : null;
 				if (!src || !pInfo || !src.fin || src.fin === '-') return false;
 				
-				// 使用十三辙判断韵母是否匹配
-				const srcTrack = thirteenTracks.find(t => t.finals.includes(src.fin));
-				const pTrack = thirteenTracks.find(t => t.finals.includes(pInfo.fin));
-				
-				// 如果找不到辙（特殊韵母），则必须完全相同
-				if (!srcTrack || !pTrack) {
-					if (src.fin !== pInfo.fin) return false;
+				// 检查韵母兼容性
+				let rhymeOk = false;
+				if (tier === 0) {
+					// 严格：必须完全相同
+					rhymeOk = (src.fin === pInfo.fin);
 				} else {
-					// 如果找到了辙
-					if (tier === 0) {
-						// 严格模式：韵母必须完全相同
-						if (src.fin !== pInfo.fin) return false;
-					} else {
-						// 宽松模式：只要同辙即可
-						if (srcTrack !== pTrack) return false;
-					}
+					// 宽松：检查是否在同一个变体组中
+					const variants = buildFinalVariants(src.fin, tier);
+					rhymeOk = variants.includes(pInfo.fin);
 				}
 				
+				if (!rhymeOk) return false;
+				
 				// 检查声调
-				const toneOk = allowToneRelax || src.tone === pInfo.tone;
+				// Tier 0 & 1: 声调必须相同
+				// Tier 2: 声调可不同
+				const toneOk = allowToneRelax || (src.tone === pInfo.tone);
 				if (!toneOk) return false;
+
+				// --- 新增：声母类型过滤 ---
+				// 规则：如果源字声母不是平翘舌音，则匹配字声母也不能是平翘舌音。
+				// 避免“自律(l)”匹配到“世世(sh)”这种听感差异巨大的情况。
+				const srcIsSpecial = specialInitials.includes(src.ini);
+				const matchIsSpecial = specialInitials.includes(pInfo.ini);
+				
+				if (!srcIsSpecial && matchIsSpecial) {
+					return false;
+				}
+				// -------------------------
 			}
 			return true;
 		};
@@ -975,8 +997,13 @@
 			if (forceTone !== null) {
 				targetTones = [Number(forceTone)];
 			} else {
-				// 声调优先：0和1都保持原声调，2才会尝试放开
-				targetTones = [originalTone];
+				// Tier 2: 所有声调
+				// Tier 0/1: 严格声调
+				if (tier >= 2) {
+					targetTones = [1, 2, 3, 4];
+				} else {
+					targetTones = [originalTone];
+				}
 			}
 
 			const candidates = [];
@@ -988,11 +1015,7 @@
 
 			// 如果最松档且没有结果，才尝试忽略声调
 			if (candidates.length === 0 && tier >= 2 && !forceTone) {
-				for (const f of finalsToTry) {
-					for (let t = 1; t <= 4; t++) {
-						candidates.push(...(bankMap.get(`${f}-${t}`) || []));
-					}
-				}
+				// 已经在上面处理了所有声调，这里不需要额外逻辑，除非 bankMap 缺失
 			}
 
 			if (candidates.length === 0) return null;
