@@ -387,7 +387,8 @@
 					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
 					<input type="range" id="looseness" min="0" max="1" step="0.05" value="0.5" />
 				</div>
-				<div class="hint">0 严格：同韵同调；0.34-0.66 中等：韵母放宽（前后鼻音等）但声调相同；≥0.67 最松：进一步放宽韵母（iang/ang等），最后才忽略声调。</div>
+				<div class="hint">0 严格：同韵同调  | 中等：韵母放宽（前后鼻音等 | 最松：韵母进一步放宽，忽略声调。</div>
+				<div class="hint">-越宽松需要查询的时间越长，请耐心等待-</div>
 			</section>
 
 			<section class="panel">
@@ -536,14 +537,18 @@
 			['iang', 'ian']
 		];
 
-		const looseExtraPairs = [
-			['iang', 'ang']
+		// 多元音韵母组（介音+主元音相近的可以互换）
+		const vowelGroups = [
+			['ia', 'ua', 'a'],      // 主元音 a
+			['ie', 'ue', 've'],     // 主元音 e
+			['uo', 'o'],            // 主元音 o
+			['iu', 'ou', 'u']       // 主元音 u/ou 系列
 		];
 
 		// 松紧分级（声调优先）：
 		// 0（严格）：声调完全相同 + 韵母完全相同
-		// 0.5（中等）：声调完全相同 + 韵母允许前后鼻音合并（ang/an、iang/ian等）
-		// 1（最松）：声调相同 + 韵母进一步合并（iang/ang），若找不到再忽略声调
+		// 0.5（中等）：声调完全相同 + 韵母允许前后鼻音合并（ang/an、iang/ian等）+ 多元音以最后一个元音为准（ua=ia=a）
+		// 1（最松）：在中等模式基础上，若找不到再忽略声调
 		const getLoosenessTier = (value) => {
 			if (value >= 0.67) return 2;
 			if (value >= 0.34) return 1;
@@ -603,8 +608,8 @@
 			if (dict) {
 				for (const queryKey of queryKeys) {
 					for (const [dictKey, candidates] of Object.entries(dict)) {
-						// 检查查询key是否在dictKey中结尾匹配
-						if (dictKey.endsWith(queryKey)) {
+						// 检查查询key是否在dictKey中结尾匹配（使用_作为分隔符确保完整匹配）
+						if (dictKey === queryKey || dictKey.endsWith('_' + queryKey)) {
 							if (candidates && Array.isArray(candidates)) {
 								for (const phrase of candidates) {
 									const phraseLen = Array.from(phrase).length;
@@ -668,6 +673,24 @@
 			sameLengthResults.push(...matchedByWordCount[len]);
 		}
 		
+		// 如果没有相同字数的匹配，且源字数大于2，尝试降级查询
+		if (sameLengthResults.length === 0 && sourceLength > 2) {
+			let currentLength = sourceLength - 1;
+			while (currentLength >= 2 && sameLengthResults.length === 0) {
+				// 取末尾 currentLength 个字重新查询
+				const shorterInfos = infos.slice(-currentLength);
+				const shorterResult = queryDict(shorterInfos, looseness);
+				
+				if (shorterResult && shorterResult.sameLength && shorterResult.sameLength.length > 0) {
+					sameLengthResults.push(...shorterResult.sameLength);
+					console.log(`降级查询成功：从 ${sourceLength} 字降到 ${currentLength} 字`);
+					break;
+				}
+				
+				currentLength--;
+			}
+		}
+		
 		// 然后添加所有字数更多的匹配
 		const moreLengthCandidates = sortedLengths.filter(len => len > sourceLength);
 		for (const len of moreLengthCandidates) {
@@ -683,18 +706,20 @@
 		const buildFinalVariants = (fin, tier) => {
 			const variants = new Set([fin]);
 			if (tier >= 1) {
+				// 前后鼻音合并
 				for (const [a, b] of nasalPairs) {
 					if (a === fin || b === fin) {
 						variants.add(a);
 						variants.add(b);
 					}
 				}
-			}
-			if (tier >= 2) {
-				for (const [a, b] of looseExtraPairs) {
-					if (a === fin || b === fin) {
-						variants.add(a);
-						variants.add(b);
+				
+				// 多元音韵母组匹配（同组内的韵母可以互换）
+				for (const group of vowelGroups) {
+					if (group.includes(fin)) {
+						for (const f of group) {
+							variants.add(f);
+						}
 					}
 				}
 			}
