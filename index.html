@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>中文押韵生成器</title>
+	<title>中文押韵生成器v1.0</title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<style>
 		:root {
@@ -75,6 +75,51 @@
 			}
 		}
 
+		@media (max-width: 600px) {
+			body {
+				padding: 20px 12px 40px;
+			}
+			header {
+				padding: 20px 20px 8px;
+			}
+			h1 {
+				font-size: 24px;
+			}
+			main {
+				padding: 0 20px 20px;
+			}
+			.panel {
+				padding: 16px;
+			}
+			.btn {
+				padding: 10px 16px;
+				font-size: 14px;
+			}
+			.btn.small {
+				padding: 6px 10px;
+				font-size: 12px;
+			}
+			textarea,
+			input[type="text"] {
+				padding: 12px;
+				font-size: 15px; /* 防止iOS缩放 */
+				min-height: 100px;
+			}
+			.controls {
+				gap: 6px;
+			}
+			table {
+				font-size: 12px;
+			}
+			th, td {
+				padding: 6px;
+			}
+			.footer {
+				padding: 8px 20px 16px;
+				font-size: 11px;
+			}
+		}
+
 		.panel {
 			background: var(--panel);
 			border: 1px solid var(--border);
@@ -122,6 +167,51 @@
 			box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
 		}
 
+		input[type="range"] {
+			-webkit-appearance: none;
+			appearance: none;
+			width: 100%;
+			height: 8px;
+			background: rgba(255, 255, 255, 0.3);
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			cursor: pointer;
+			outline: none;
+		}
+
+		input[type="range"]::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			position: relative;
+			z-index: 1;
+		}
+
+		input[type="range"]::-webkit-slider-thumb:hover {
+			transform: scale(1.1);
+		}
+
+		input[type="range"]::-moz-range-thumb {
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+			cursor: pointer;
+			border: none;
+			transition: transform 0.2s ease;
+		}
+
+		input[type="range"]::-moz-range-thumb:hover {
+			transform: scale(1.1);
+		}
+
 		.controls {
 			display: flex;
 			flex-wrap: wrap;
@@ -161,6 +251,12 @@
 		.btn.ghost:hover {
 			border-color: var(--accent);
 			box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+		}
+
+		.btn.small {
+			padding: 8px 12px;
+			font-size: 14px;
+			font-weight: 500;
 		}
 
 		.hint {
@@ -277,19 +373,27 @@
 
 		<main>
 			<section class="panel">
-				<label for="source">
-					请输入要押韵的词语：
-				</label>
+				<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; margin-bottom: 10px;">
+					<label for="source">请输入要押韵的词语：</label>
+					<a class="btn ghost small" href="custom.html">自定义词库</a>
+				</div>
 				<textarea id="source" placeholder="示例：废壳"></textarea>
 
-				<div class="controls">
-					<button class="btn" id="go">生成押韵</button>
-					<a class="btn ghost" href="custom.html">自定义词库</a>
-					<button class="btn ghost" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
-					<label class="small" for="looseness">韵脚宽松度（0=严格，1=最松）</label>
-					<input type="range" id="looseness" min="0" max="1" step="0.05" value="0.15" />
+				<div class="controls" style="display: flex; flex-direction: column; gap: 1px; margin-top: 12px;">
+					<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+						<button class="btn" id="go">生成押韵</button>
+						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
+					</div>
+					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
+					<input type="range" id="looseness" min="0" max="1" step="0.05" value="0.5" />
 				</div>
 				<div class="hint">0 严格：同韵同调；0.34-0.66 中等：韵母放宽（前后鼻音等）但声调相同；≥0.67 最松：进一步放宽韵母（iang/ang等），最后才忽略声调。</div>
+			</section>
+
+			<section class="panel">
+				<div style="font-weight: 600; margin-bottom: 14px;">生成结果</div>
+				<div class="output" id="output"></div>
+				<div class="badge-row" id="badges"></div>
 			</section>
 
 		</main>
@@ -311,7 +415,7 @@
 
 		<section class="panel" style="margin: 0 32px 20px;">
 			<div id="matchedResults" style="padding: 12px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 8px; display: none;">
-				<div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-2);">匹配结果：</div>
+				<div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-2);">更多匹配结果：</div>
 				<div id="matchedResultsList" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
 			</div>
 			<div id="dictStatus" style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
@@ -354,6 +458,7 @@
 		let bankMap = new Map();
 		let pinyinReady = false;
 		let currentInfos = [];
+		let currentDictResult = null; // 存储字典查询结果
 		let dict = null; // 优化字典
 		let locks = [];
 
@@ -447,7 +552,7 @@
 
 		// 从字典查询拼音组合对应的词组（新算法）
 		// 使用最后两个字的韵脚为查询条件，返回所有相关匹配
-		const queryDict = (infos) => {
+		const queryDict = (infos, looseness) => {
 			if (!infos || infos.length === 0) return null;
 			
 			// 获取最后两个字的韵脚
@@ -464,9 +569,31 @@
 			const validInfos = lastTwoInfos.filter(info => info.fin && info.fin !== '-');
 			if (validInfos.length === 0) return null;
 			
-			// 构建查询key
-			const keyParts = validInfos.map(info => `${info.fin}${info.tone}`);
-			const queryKey = keyParts.join('_');
+			const tier = getLoosenessTier(looseness);
+			const allowToneRelax = tier >= 2;
+			
+			// 生成所有可能的查询键变体
+			const generateQueryKeys = (infos) => {
+				const keys = [];
+				const recurse = (index, current) => {
+					if (index === infos.length) {
+						keys.push(current.join('_'));
+						return;
+					}
+					const info = infos[index];
+					const finVariants = buildFinalVariants(info.fin, tier);
+					const toneVariants = allowToneRelax ? [1,2,3,4] : [info.tone];
+					for (const fin of finVariants) {
+						for (const tone of toneVariants) {
+							recurse(index + 1, [...current, `${fin}${tone}`]);
+						}
+					}
+				};
+				recurse(0, []);
+				return keys;
+			};
+			
+			const queryKeys = generateQueryKeys(validInfos);
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
@@ -474,18 +601,22 @@
 			
 			// 遍历优化字典寻找匹配
 			if (dict) {
-				for (const [dictKey, candidates] of Object.entries(dict)) {
-					// 检查查询key是否在dictKey中结尾匹配
-					if (dictKey.endsWith(queryKey)) {
-						if (candidates && Array.isArray(candidates)) {
-							for (const phrase of candidates) {
-								const phraseLen = Array.from(phrase).length;
-								
-								// 按字数分类
-								if (!matchedByWordCount[phraseLen]) {
-									matchedByWordCount[phraseLen] = [];
+				for (const queryKey of queryKeys) {
+					for (const [dictKey, candidates] of Object.entries(dict)) {
+						// 检查查询key是否在dictKey中结尾匹配
+						if (dictKey.endsWith(queryKey)) {
+							if (candidates && Array.isArray(candidates)) {
+								for (const phrase of candidates) {
+									const phraseLen = Array.from(phrase).length;
+									
+									// 按字数分类
+									if (!matchedByWordCount[phraseLen]) {
+										matchedByWordCount[phraseLen] = [];
+									}
+									if (!matchedByWordCount[phraseLen].includes(phrase)) {
+										matchedByWordCount[phraseLen].push(phrase);
+									}
 								}
-								matchedByWordCount[phraseLen].push(phrase);
 							}
 						}
 					}
@@ -507,7 +638,7 @@
 									const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
 									const phraseKey = phraseKeyParts.join('_');
 									
-									if (phraseKey === queryKey) {
+									if (queryKeys.includes(phraseKey)) {
 										const phraseLen = Array.from(phrase).length;
 										if (!matchedByWordCount[phraseLen]) {
 											matchedByWordCount[phraseLen] = [];
@@ -525,27 +656,28 @@
 				console.warn('自定义词库读取失败:', e);
 			}
 			
-		// 返回顺序：
-		// 1. 先返回所有相同字数的匹配
-		// 2. 然后返回所有字数更多的匹配（按字数升序）
-		// 3. 不返回字数更少的匹配
+		// 返回分类结果
 		let sortedLengths = Object.keys(matchedByWordCount).map(Number).sort((a, b) => a - b);
 		
-		const result = [];
+		const sameLengthResults = [];
+		const moreLengthResults = [];
 		
 		// 先添加相同字数的匹配
 		const sameLengthCandidates = sortedLengths.filter(len => len === sourceLength);
 		for (const len of sameLengthCandidates) {
-			result.push(...matchedByWordCount[len]);
+			sameLengthResults.push(...matchedByWordCount[len]);
 		}
 		
 		// 然后添加所有字数更多的匹配
 		const moreLengthCandidates = sortedLengths.filter(len => len > sourceLength);
 		for (const len of moreLengthCandidates) {
-			result.push(...matchedByWordCount[len]);
+			moreLengthResults.push(...matchedByWordCount[len]);
 		}
 		
-		return result.length > 0 ? result : null;
+		return {
+			sameLength: sameLengthResults.length > 0 ? sameLengthResults : null,
+			moreLengths: moreLengthResults.length > 0 ? moreLengthResults : null
+		};
 	};
 
 		const buildFinalVariants = (fin, tier) => {
@@ -567,6 +699,24 @@
 				}
 			}
 			return Array.from(variants);
+		};
+
+		// 检查候选短语是否逐字匹配源词的韵脚（优先保证每个字的韵脚一致）
+		const phraseFitsSource = (phrase, sourceInfos, looseness) => {
+			const tier = getLoosenessTier(looseness);
+			const allowToneRelax = tier >= 2; // 仅在最松档才放开声调
+			const chars = Array.from(phrase);
+			for (let i = 0; i < sourceInfos.length; i++) {
+				const src = sourceInfos[i];
+				const ch = chars[i];
+				const pInfo = ch ? toInfo(ch) : null;
+				if (!src || !pInfo || !src.fin || src.fin === '-') return false;
+				const variants = buildFinalVariants(src.fin, tier);
+				const finOk = variants.includes(pInfo.fin);
+				const toneOk = allowToneRelax || src.tone === pInfo.tone;
+				if (!finOk || !toneOk) return false;
+			}
+			return true;
 		};
 
 		const pickFromMap = (fin, originalTone, looseness, forceTone = null) => {
@@ -605,12 +755,12 @@
 			const src = document.getElementById('source').value.trim();
 			const looseness = Number(document.getElementById('looseness').value);
 			if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
-				render([], 'pinyin-pro 未加载，请检查网络或稍后重试');
+				render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null);
 				return;
 			}
 			if (bankMap.size === 0) bankMap = registerBank();
 			if (!src) {
-				render([], '等待输入...');
+				render([], '等待输入...', null);
 				return;
 			}
 
@@ -633,15 +783,16 @@
 			});
 			
 			// 尝试从字典查询整句
-			const dictResult = queryDict(tempInfosWithOverrides);
+			const dictResult = queryDict(tempInfosWithOverrides, looseness);
+			currentDictResult = dictResult; // 保存到全局变量供render使用
 			
-			// 显示匹配结果
+			// 显示匹配结果（字数更多的）
 			const matchedResults = document.getElementById('matchedResults');
 			const matchedResultsList = document.getElementById('matchedResultsList');
-			if (dictResult && dictResult.length > 0) {
+			if (dictResult && dictResult.moreLengths && dictResult.moreLengths.length > 0) {
 				matchedResults.style.display = 'block';
 				matchedResultsList.innerHTML = '';
-				dictResult.forEach(phrase => {
+				dictResult.moreLengths.forEach(phrase => {
 					const span = document.createElement('span');
 					span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
 					span.textContent = phrase;
@@ -652,19 +803,20 @@
 			}
 			
 			if (dictResult) {
-				console.log('字典查询成功，找到匹配数:', dictResult.length);
-				console.log('dictResult:', dictResult);
-				console.log('dictResult[0] 类型:', typeof dictResult[0]);
-				console.log('dictResult[0] 值:', dictResult[0]);
+				console.log('字典查询成功');
+				console.log('相同字数结果:', dictResult.sameLength);
+				console.log('更长字数结果:', dictResult.moreLengths);
 			}
 			
 			let newInfos;
 			// 检查 dictResult 是否是多个候选项（字符串数组）
-			if (dictResult && Array.isArray(dictResult) && dictResult.length > 0 && typeof dictResult[0] === 'string') {
-				// 字典查询成功，返回多个候选项
-				// dictResult 是一个字符串数组，每个字符串是一个候选词
-				// 为每个字符位置生成候选项列表
-				const firstPhrase = Array.from(dictResult[0]); // 第一个结果作为默认结果
+			if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength) && dictResult.sameLength.length > 0) {
+				// 优先逐字韵脚匹配（所有字都要满足源词的韵母/声调规则）；若无，再退回“末两字”匹配结果
+				const tier = getLoosenessTier(looseness);
+				const allowToneRelax = tier >= 2;
+				const strongMatches = dictResult.sameLength.filter((phrase) => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
+				const ranked = strongMatches.length > 0 ? strongMatches : dictResult.sameLength;
+				const firstPhrase = Array.from(ranked[0]); // 第一条作为默认生成
 				
 				newInfos = tempInfosWithOverrides.map((info, idx) => {
 					// 保留锁定状态
@@ -680,7 +832,7 @@
 					
 					// 为这个位置的所有候选词收集第 idx 个字符
 					const charCandidates = [];
-					for (const phrase of dictResult) {
+					for (const phrase of ranked) {
 						const chars = Array.from(phrase);
 						if (idx < chars.length) {
 							const char = chars[idx];
@@ -692,7 +844,7 @@
 					
 					console.log(`位置 ${idx}: candidates = ${JSON.stringify(charCandidates)}`);
 					
-					// 使用第一个查询结果的对应位置的字作为 generated
+					// 使用排名第一的短语对应位置的字作为 generated
 					const selectedChar = idx < firstPhrase.length ? firstPhrase[idx] : (charCandidates[0] || info.char);
 					
 					return { 
@@ -729,7 +881,7 @@
 			}
 			
 			currentInfos = newInfos;
-			render(currentInfos, currentInfos.map((i) => i.generated).join(''));
+			render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult);
 		};
 
 		const updateSingleChar = (index, newTone) => {
@@ -747,7 +899,51 @@
 			process();
 		};
 
-		const render = (infos, text) => {
+		const render = (infos, text, dictResult) => {
+			// 更新右侧生成结果面板
+			const output = document.getElementById('output');
+			const badges = document.getElementById('badges');
+			
+			if (output) {
+				// 显示相同字数的所有匹配结果（来自dictResult）
+				const results = [];
+				
+				// 先显示当前生成结果
+				results.push(text);
+				
+				// 然后添加字典中的相同字数结果
+				if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength)) {
+					for (const phrase of dictResult.sameLength) {
+						if (phrase !== text && !results.includes(phrase)) {
+							results.push(phrase);
+						}
+					}
+				}
+				
+				// 用制表符分隔显示所有结果在同一行
+				const resultText = results.join('\t');
+				output.style.whiteSpace = 'pre-wrap';
+				output.style.wordBreak = 'keep-all';
+				output.style.overflowWrap = 'normal';
+				output.textContent = resultText || '-';
+				output.style.fontFamily = 'var(--font-family, "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif)';
+				output.style.fontSize = '18px';
+				output.style.fontWeight = '500';
+				output.style.lineHeight = '1.8';
+				output.style.letterSpacing = '0.5px';
+			}
+			
+			if (badges) {
+				badges.innerHTML = '';
+				if (text) {
+					const badge = document.createElement('div');
+					badge.className = 'badge';
+					badge.innerHTML = `✨ ${text.length} 字`;
+					badges.appendChild(badge);
+				}
+			}
+			
+			// 更新下方详情表格
 			const body = document.getElementById('detailBody');
 			body.innerHTML = '';
 			infos.forEach((i, index) => {
@@ -922,6 +1118,15 @@
 		}
 		};
 
+		// Debounce 函数
+		const debounce = (func, delay) => {
+			let timeoutId;
+			return (...args) => {
+				clearTimeout(timeoutId);
+				timeoutId = setTimeout(() => func(...args), delay);
+			};
+		};
+
 		const init = () => {
 			document.getElementById('go').addEventListener('click', process);
 			document.getElementById('source').addEventListener('keydown', (e) => {
@@ -932,7 +1137,9 @@
 			const triggerRecalc = () => {
 				if (document.getElementById('source').value.trim()) process();
 			};
-			loosenInput.addEventListener('input', triggerRecalc);
+			// 使用 debounce，延迟 300ms 后再执行查询
+			const debouncedRecalc = debounce(triggerRecalc, 100);
+			loosenInput.addEventListener('input', debouncedRecalc);
 			loosenInput.addEventListener('change', triggerRecalc);
 
 			const loadDictBtn = document.getElementById('loadDictBtn');
