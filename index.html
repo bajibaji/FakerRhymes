@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>中文押韵生成器v1.1</title>
+	<title>中文押韵生成器</title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<style>
 		:root {
@@ -397,7 +397,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.1 beta</h1>
+			<h1>连押同调韵脚生成器 v1.2 beta</h1>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
 
@@ -415,9 +415,9 @@
 						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
 					</div>
 					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
-					<input type="range" id="looseness" min="0" max="1" step="0.05" value="0.5" />
+					<input type="range" id="looseness" min="0" max="1" step="0.5" value="0.0" />
 				</div>
-				<div class="hint">0 严格：同韵同调  | 中等：韵母放宽（前后鼻音等 | 最松：韵母进一步放宽，忽略声调。</div>
+				<div class="hint">严格：同韵同调  | 中等：韵母放宽（前后鼻音等 | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">-越宽松需要查询的时间越长，请耐心等待-</div>
 			</section>
 
@@ -610,8 +610,10 @@
 		};
 
 		const detectFinal = (p) => {
+			// 标准化：ü -> v
 			let normalizedP = p.replace(/ü/g, 'v').replace(/u:/g, 'v');
-			// 提取声母（从长到短匹配）
+			
+			// 提取声母（按长度排序，确保 zh 优先于 z）
 			const initials = ['zh', 'ch', 'sh', 'z', 'c', 's', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'w', 'y'];
 			let initial = '';
 			for (const init of initials) {
@@ -620,44 +622,24 @@
 					break;
 				}
 			}
+			
 			let rest = normalizedP.slice(initial.length);
-			// j/q/x/y 后的 u 实际是 ü，将首字母替换为 v 以对齐词典键
+			
+			// 特殊处理：j/q/x/y 后的 u 实际是 ü (v)
 			if (['j', 'q', 'x', 'y'].includes(initial) && rest.startsWith('u')) {
 				rest = 'v' + rest.slice(1);
-				normalizedP = initial + rest;
 			}
 			
-			// 处理卷舌音（z、c、s）：zi、ci、si、zu、cu、su 的"i、u"实际发音是ɚ，不是真正的i/u
-			if (['z', 'c', 's'].includes(initial)) {
-				if (normalizedP === initial || normalizedP === initial + 'i' || normalizedP === initial + 'u') {
-					return initial + '-retroflex';
-				}
-			}
+			// 特殊处理：zi, ci, si, zhi, chi, shi, ri 的韵母在 pinyin-pro 中是 i
+			// 但为了兼容旧字典键值（如果存在），或者为了明确归类，这里我们直接返回 rest
+			// 注意：pinyin-pro 对 zi 返回 i，对 zu 返回 u。
+			// 之前的代码把 zu 也归为了 z-retroflex，这是错误的。
+			// 现在我们直接返回提取出的韵母，并在 buildFinalVariants 中处理归类。
 			
-			// 处理翘舌音（zh、ch、sh、r）：这些音和卷舌音类似，e、ei等也有特殊发音
-			if (['zh', 'ch', 'sh', 'r'].includes(initial)) {
-				// 对于 zhe、che、she、re 等，标记为翘舌音
-				if (!rest || rest === 'i' || rest === 'u' || rest === 'e' || rest === 'ei') {
-					return initial + '-retroflex-e';
-				}
-			}
+			// 如果没有韵母（比如 m, n, ng 自成音节），返回原拼音
+			if (!rest) return normalizedP;
 			
-			// 处理j、q、x（舌面音）：其"i"实际是ɨ，也不同于普通的i
-			if (['j', 'q', 'x'].includes(initial)) {
-				if (normalizedP === initial || normalizedP === initial + 'i') {
-					return initial + '-palatal';
-				}
-			}
-			
-			// 其他情况用原来的逻辑，优先尝试去掉声母后的剩余部分
-			for (const f of finals) {
-				if (rest && rest.endsWith(f)) return f;
-			}
-			for (const f of finals) {
-				if (normalizedP.endsWith(f)) return f;
-			}
-			// 如果没有命中但仍是字母组合，返回原拼音作为韵母以避免丢字
-			return normalizedP || null;
+			return rest;
 		};
 
 		const toInfo = (char) => {
@@ -696,34 +678,46 @@
 			return map;
 		};
 
-		const nasalPairs = [
-			['ang', 'an'],
-			['eng', 'en'],
-			['ing', 'in'],
-			['uan', 'an'],
-			['uai', 'ai'],
-			['iao', 'ao'],
-			['ai', 'ei'],
-			['an', 'ian'],
-			['iang', 'ian']
-		];
-
-		// 多元音韵母组（介音+主元音相近的可以互换）
-		const vowelGroups = [
-			['ia', 'ua', 'a'],      // 主元音 a
-			['ie', 'ue', 've'],     // 主元音 e
-			['uo', 'o'],            // 主元音 o
-			['iu', 'ou', 'u']       // 主元音 u/ou 系列
+		const thirteenTracks = [
+			{ name: '发花辙', finals: ['a', 'ia', 'ua'] },
+			{ name: '梭波辙', finals: ['o', 'e', 'uo'] },
+			{ name: '乜斜辙', finals: ['ie', 'ue', 've'] },
+			{ name: '言前辙', finals: ['an', 'ian', 'uan', 'van', 'üan'] },
+			{ name: '人辰辙', finals: ['en', 'in', 'un', 'vn', 'ün'] },
+			{ name: '江阳辙', finals: ['ang', 'iang', 'uang'] },
+			{ name: '中东辙', finals: ['eng', 'ing', 'ong', 'iong'] },
+			{ name: '一七辙', finals: ['i', 'v', 'er', 'ü'] },
+			{ name: '姑苏辙', finals: ['u'] },
+			{ name: '怀来辙', finals: ['ai', 'uai'] },
+			{ name: '灰堆辙', finals: ['ei', 'ui', 'uei'] },
+			{ name: '遥条辙', finals: ['ao', 'iao'] },
+			{ name: '油求辙', finals: ['ou', 'iu', 'iou'] }
 		];
 
 		// 松紧分级（声调优先）：
 		// 0（严格）：声调完全相同 + 韵母完全相同
-		// 0.5（中等）：声调完全相同 + 韵母允许前后鼻音合并（ang/an、iang/ian等）+ 多元音以最后一个元音为准（ua=ia=a）
+		// 0.5（中等）：声调完全相同 + 十三辙互押
 		// 1（最松）：在中等模式基础上，若找不到再忽略声调
 		const getLoosenessTier = (value) => {
 			if (value >= 0.67) return 2;
 			if (value >= 0.34) return 1;
 			return 0;
+		};
+
+		// 兼容旧字典键值的扩展映射
+		const legacyKeyMap = {
+			'i': [
+				'i', 
+				'z-retroflex', 'c-retroflex', 's-retroflex',
+				'zh-retroflex-e', 'ch-retroflex-e', 'sh-retroflex-e', 'r-retroflex-e',
+				'j-palatal', 'q-palatal', 'x-palatal'
+			],
+			'u': [
+				'u',
+				// 旧代码把 zu, cu, su 也归为 retroflex，所以也要查这些
+				'z-retroflex', 'c-retroflex', 's-retroflex',
+				'zh-retroflex-e', 'ch-retroflex-e', 'sh-retroflex-e', 'r-retroflex-e'
+			]
 		};
 
 		// 从字典查询拼音组合对应的词组（新算法）
@@ -760,18 +754,21 @@
 					const isLast = index === infos.length - 1;
 					const toneVariants = allowToneRelax && isLast ? [1,2,3,4] : [info.tone];
 					
-					// 对于特殊标记的韵母（包含-），不进行扩展，直接使用原韵母
-					if (info.fin.includes('-')) {
-						for (const tone of toneVariants) {
-							recurse(index + 1, [...current, `${info.fin}${tone}`]);
+					// 获取该韵母的所有变体（十三辙）
+					const finVariants = buildFinalVariants(info.fin, tier);
+					
+					// 扩展为旧字典的键值
+					const expandedVariants = new Set();
+					for (const v of finVariants) {
+						expandedVariants.add(v);
+						if (legacyKeyMap[v]) {
+							legacyKeyMap[v].forEach(k => expandedVariants.add(k));
 						}
-					} else {
-						// 普通韵母才使用变体扩展
-						const finVariants = buildFinalVariants(info.fin, tier);
-						for (const fin of finVariants) {
-							for (const tone of toneVariants) {
-								recurse(index + 1, [...current, `${fin}${tone}`]);
-							}
+					}
+
+					for (const fin of expandedVariants) {
+						for (const tone of toneVariants) {
+							recurse(index + 1, [...current, `${fin}${tone}`]);
 						}
 					}
 				};
@@ -901,55 +898,29 @@
 	};
 
 		const buildFinalVariants = (fin, tier) => {
-			const variants = new Set([fin]);
+			// 查找该韵母属于哪个辙
+			const track = thirteenTracks.find(t => t.finals.includes(fin));
 			
-			// 对于特殊标记的韵母（包含 `-` 的），不进行任何变体扩展
-			// 例如：x-palatal、zh-retroflex-e 等不应该和普通韵母混淆
-			if (fin.includes('-')) {
-				return Array.from(variants);
+			// 如果找不到（可能是特殊韵母或未收录），返回自身
+			if (!track) return [fin];
+			
+			// Tier 0: 严格模式，只返回完全相同的韵母
+			// 但为了兼容性，如果用户想要同辙互押，可以调整这里。
+			// 既然用户强调十三辙，我们假设 Tier 1 才是十三辙互押。
+			if (tier === 0) {
+				return [fin];
 			}
 			
-			if (tier >= 1) {
-				// 前后鼻音合并
-				for (const [a, b] of nasalPairs) {
-					if (a === fin || b === fin) {
-						variants.add(a);
-						variants.add(b);
-					}
-				}
-				
-				// 多元音韵母组匹配（同组内的韵母可以互换）
-				for (const group of vowelGroups) {
-					if (group.includes(fin)) {
-						for (const f of group) {
-							variants.add(f);
-						}
-					}
-				}
-			}
-			
-			// 在最松档尝试 u / v(ü) 的近似，范围控制在常见几组
-			if (tier >= 2) {
-				const uvPairs = [
-					['v', 'u'],
-					['vn', 'un'],
-					['ve', 'ue'],
-					['van', 'uan']
-				];
-				for (const [a, b] of uvPairs) {
-					if (a === fin || b === fin) {
-						variants.add(a);
-						variants.add(b);
-					}
-				}
-			}
-			return Array.from(variants);
+			// Tier >= 1: 返回同辙的所有韵母
+			return track.finals;
 		};
 
 		const normalizeSpecialFinal = (fin) => {
-			if (fin.includes('-retroflex-e')) return '-retroflex';
-			if (fin.includes('-retroflex')) return '-retroflex';
-			if (fin.includes('-palatal')) return '-palatal';
+			// 旧逻辑残留，现在直接返回 fin 即可，或者为了兼容旧字典键值做映射
+			// 由于我们重构了 detectFinal，不再产生 -retroflex 等后缀
+			// 但如果字典里有旧键值，我们需要在这里处理吗？
+			// 不，这个函数是用来比较 source 和 phrase 的韵母是否一致的。
+			// 现在我们统一用十三辙判断。
 			return fin;
 		};
 
@@ -964,26 +935,27 @@
 				const pInfo = ch ? toInfo(ch) : null;
 				if (!src || !pInfo || !src.fin || src.fin === '-') return false;
 				
-				// 检查候选字是否也是特殊标记
-				const srcHasSpecial = src.fin.includes('-');
-				const pHasSpecial = pInfo.fin.includes('-');
+				// 使用十三辙判断韵母是否匹配
+				const srcTrack = thirteenTracks.find(t => t.finals.includes(src.fin));
+				const pTrack = thirteenTracks.find(t => t.finals.includes(pInfo.fin));
 				
-				// 如果源韵母是特殊标记的，候选韵母也必须兼容（最松档放宽到同类）
-				if (srcHasSpecial) {
-					const finOk = src.fin === pInfo.fin || (allowToneRelax && normalizeSpecialFinal(src.fin) === normalizeSpecialFinal(pInfo.fin));
-					const toneOk = allowToneRelax || src.tone === pInfo.tone;
-					if (!finOk || !toneOk) return false;
+				// 如果找不到辙（特殊韵母），则必须完全相同
+				if (!srcTrack || !pTrack) {
+					if (src.fin !== pInfo.fin) return false;
 				} else {
-					// 源韵母是普通的
-					// 如果候选韵母也是特殊标记，则不能匹配（普通i不能与卷舌音匹配）
-					if (pHasSpecial) return false;
-					
-					// 两者都是普通韵母，按原逻辑处理
-					const variants = buildFinalVariants(src.fin, tier);
-					const finOk = variants.includes(pInfo.fin);
-					const toneOk = allowToneRelax || src.tone === pInfo.tone;
-					if (!finOk || !toneOk) return false;
+					// 如果找到了辙
+					if (tier === 0) {
+						// 严格模式：韵母必须完全相同
+						if (src.fin !== pInfo.fin) return false;
+					} else {
+						// 宽松模式：只要同辙即可
+						if (srcTrack !== pTrack) return false;
+					}
 				}
+				
+				// 检查声调
+				const toneOk = allowToneRelax || src.tone === pInfo.tone;
+				if (!toneOk) return false;
 			}
 			return true;
 		};
