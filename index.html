@@ -397,7 +397,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连续押同音调的韵脚生成器</h1>
+			<h1>连押同调韵脚生成器 v1.1 beta</h1>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
 
@@ -595,7 +595,14 @@
 			}
 		};
 
-		const normalize = (p) => p.replace(/\d/g, '');
+		const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
+
+		// 将键统一转成 v 形式，并生成 v/u 双版本，兼容词典中可能用 u 表示 ü 的情况
+		const buildKeyVariants = (key) => {
+			const base = String(key).replace(/ü/g, 'v').replace(/u:/g, 'v');
+			const variants = new Set([base, base.replace(/v/g, 'u')]);
+			return Array.from(variants);
+		};
 
 		const extractTone = (p) => {
 			const m = p.match(/(\d)/);
@@ -603,10 +610,54 @@
 		};
 
 		const detectFinal = (p) => {
-			for (const f of finals) {
-				if (p.endsWith(f)) return f;
+			let normalizedP = p.replace(/ü/g, 'v').replace(/u:/g, 'v');
+			// 提取声母（从长到短匹配）
+			const initials = ['zh', 'ch', 'sh', 'z', 'c', 's', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'w', 'y'];
+			let initial = '';
+			for (const init of initials) {
+				if (normalizedP.startsWith(init)) {
+					initial = init;
+					break;
+				}
 			}
-			return null;
+			let rest = normalizedP.slice(initial.length);
+			// j/q/x/y 后的 u 实际是 ü，将首字母替换为 v 以对齐词典键
+			if (['j', 'q', 'x', 'y'].includes(initial) && rest.startsWith('u')) {
+				rest = 'v' + rest.slice(1);
+				normalizedP = initial + rest;
+			}
+			
+			// 处理卷舌音（z、c、s）：zi、ci、si、zu、cu、su 的"i、u"实际发音是ɚ，不是真正的i/u
+			if (['z', 'c', 's'].includes(initial)) {
+				if (normalizedP === initial || normalizedP === initial + 'i' || normalizedP === initial + 'u') {
+					return initial + '-retroflex';
+				}
+			}
+			
+			// 处理翘舌音（zh、ch、sh、r）：这些音和卷舌音类似，e、ei等也有特殊发音
+			if (['zh', 'ch', 'sh', 'r'].includes(initial)) {
+				// 对于 zhe、che、she、re 等，标记为翘舌音
+				if (!rest || rest === 'i' || rest === 'u' || rest === 'e' || rest === 'ei') {
+					return initial + '-retroflex-e';
+				}
+			}
+			
+			// 处理j、q、x（舌面音）：其"i"实际是ɨ，也不同于普通的i
+			if (['j', 'q', 'x'].includes(initial)) {
+				if (normalizedP === initial || normalizedP === initial + 'i') {
+					return initial + '-palatal';
+				}
+			}
+			
+			// 其他情况用原来的逻辑，优先尝试去掉声母后的剩余部分
+			for (const f of finals) {
+				if (rest && rest.endsWith(f)) return f;
+			}
+			for (const f of finals) {
+				if (normalizedP.endsWith(f)) return f;
+			}
+			// 如果没有命中但仍是字母组合，返回原拼音作为韵母以避免丢字
+			return normalizedP || null;
 		};
 
 		const toInfo = (char) => {
@@ -697,7 +748,7 @@
 			const tier = getLoosenessTier(looseness);
 			const allowToneRelax = tier >= 2;
 			
-			// 生成所有可能的查询键变体
+			// 生成所有可能的查询键变体（仅在最松档对最后一字放宽声调，避免组合爆炸）
 			const generateQueryKeys = (infos) => {
 				const keys = [];
 				const recurse = (index, current) => {
@@ -706,11 +757,21 @@
 						return;
 					}
 					const info = infos[index];
-					const finVariants = buildFinalVariants(info.fin, tier);
-					const toneVariants = allowToneRelax ? [1,2,3,4] : [info.tone];
-					for (const fin of finVariants) {
+					const isLast = index === infos.length - 1;
+					const toneVariants = allowToneRelax && isLast ? [1,2,3,4] : [info.tone];
+					
+					// 对于特殊标记的韵母（包含-），不进行扩展，直接使用原韵母
+					if (info.fin.includes('-')) {
 						for (const tone of toneVariants) {
-							recurse(index + 1, [...current, `${fin}${tone}`]);
+							recurse(index + 1, [...current, `${info.fin}${tone}`]);
+						}
+					} else {
+						// 普通韵母才使用变体扩展
+						const finVariants = buildFinalVariants(info.fin, tier);
+						for (const fin of finVariants) {
+							for (const tone of toneVariants) {
+								recurse(index + 1, [...current, `${fin}${tone}`]);
+							}
 						}
 					}
 				};
@@ -719,6 +780,10 @@
 			};
 			
 			const queryKeys = generateQueryKeys(validInfos);
+			const queryVariantSet = new Set();
+			queryKeys.forEach(k => {
+				buildKeyVariants(k).forEach(v => queryVariantSet.add(v));
+			});
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
@@ -726,22 +791,24 @@
 			
 			// 遍历优化字典寻找匹配
 			if (dict) {
-				for (const queryKey of queryKeys) {
-					for (const [dictKey, candidates] of Object.entries(dict)) {
-						// 检查查询key是否在dictKey中结尾匹配（使用_作为分隔符确保完整匹配）
-						if (dictKey === queryKey || dictKey.endsWith('_' + queryKey)) {
-							if (candidates && Array.isArray(candidates)) {
-								for (const phrase of candidates) {
-									const phraseLen = Array.from(phrase).length;
-									
-									// 按字数分类
-									if (!matchedByWordCount[phraseLen]) {
-										matchedByWordCount[phraseLen] = [];
-									}
-									if (!matchedByWordCount[phraseLen].includes(phrase)) {
-										matchedByWordCount[phraseLen].push(phrase);
-									}
-								}
+				for (const [dictKey, candidates] of Object.entries(dict)) {
+					const dictVariants = buildKeyVariants(dictKey);
+					const hasMatch = dictVariants.some(dk => {
+						for (const qk of queryVariantSet) {
+							if (dk === qk || dk.endsWith('_' + qk)) return true;
+						}
+						return false;
+					});
+					if (!hasMatch) continue;
+					if (candidates && Array.isArray(candidates)) {
+						for (const phrase of candidates) {
+							const phraseLen = Array.from(phrase).length;
+							// 按字数分类
+							if (!matchedByWordCount[phraseLen]) {
+								matchedByWordCount[phraseLen] = [];
+							}
+							if (!matchedByWordCount[phraseLen].includes(phrase)) {
+								matchedByWordCount[phraseLen].push(phrase);
 							}
 						}
 					}
@@ -760,10 +827,12 @@
 								const phraseInfos = Array.from(phrase).map(ch => toInfo(ch)).filter(Boolean);
 								if (phraseInfos.length > 0) {
 									const lastTwoPhrase = phraseInfos.length >= 2 ? phraseInfos.slice(-2) : phraseInfos;
-									const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
-									const phraseKey = phraseKeyParts.join('_');
+													const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
+													const phraseKey = phraseKeyParts.join('_');
+													const phraseVariants = buildKeyVariants(phraseKey);
+													const hit = phraseVariants.some(v => queryVariantSet.has(v));
 									
-									if (queryKeys.includes(phraseKey)) {
+													if (hit) {
 										const phraseLen = Array.from(phrase).length;
 										if (!matchedByWordCount[phraseLen]) {
 											matchedByWordCount[phraseLen] = [];
@@ -786,11 +855,18 @@
 		
 		const sameLengthResults = [];
 		const moreLengthResults = [];
+		const lessLengthResults = [];
 		
 		// 先添加相同字数的匹配
 		const sameLengthCandidates = sortedLengths.filter(len => len === sourceLength);
 		for (const len of sameLengthCandidates) {
 			sameLengthResults.push(...matchedByWordCount[len]);
+		}
+		
+		// 收集少一字的匹配
+		const targetLess = sourceLength - 1;
+		if (targetLess >= 1 && matchedByWordCount[targetLess]) {
+			lessLengthResults.push(...matchedByWordCount[targetLess]);
 		}
 		
 		// 如果没有相同字数的匹配，且源字数大于2，尝试降级查询
@@ -819,12 +895,20 @@
 		
 		return {
 			sameLength: sameLengthResults.length > 0 ? sameLengthResults : null,
+			lessLength: lessLengthResults.length > 0 ? lessLengthResults : null,
 			moreLengths: moreLengthResults.length > 0 ? moreLengthResults : null
 		};
 	};
 
 		const buildFinalVariants = (fin, tier) => {
 			const variants = new Set([fin]);
+			
+			// 对于特殊标记的韵母（包含 `-` 的），不进行任何变体扩展
+			// 例如：x-palatal、zh-retroflex-e 等不应该和普通韵母混淆
+			if (fin.includes('-')) {
+				return Array.from(variants);
+			}
+			
 			if (tier >= 1) {
 				// 前后鼻音合并
 				for (const [a, b] of nasalPairs) {
@@ -843,7 +927,30 @@
 					}
 				}
 			}
+			
+			// 在最松档尝试 u / v(ü) 的近似，范围控制在常见几组
+			if (tier >= 2) {
+				const uvPairs = [
+					['v', 'u'],
+					['vn', 'un'],
+					['ve', 'ue'],
+					['van', 'uan']
+				];
+				for (const [a, b] of uvPairs) {
+					if (a === fin || b === fin) {
+						variants.add(a);
+						variants.add(b);
+					}
+				}
+			}
 			return Array.from(variants);
+		};
+
+		const normalizeSpecialFinal = (fin) => {
+			if (fin.includes('-retroflex-e')) return '-retroflex';
+			if (fin.includes('-retroflex')) return '-retroflex';
+			if (fin.includes('-palatal')) return '-palatal';
+			return fin;
 		};
 
 		// 检查候选短语是否逐字匹配源词的韵脚（优先保证每个字的韵脚一致）
@@ -856,17 +963,41 @@
 				const ch = chars[i];
 				const pInfo = ch ? toInfo(ch) : null;
 				if (!src || !pInfo || !src.fin || src.fin === '-') return false;
-				const variants = buildFinalVariants(src.fin, tier);
-				const finOk = variants.includes(pInfo.fin);
-				const toneOk = allowToneRelax || src.tone === pInfo.tone;
-				if (!finOk || !toneOk) return false;
+				
+				// 检查候选字是否也是特殊标记
+				const srcHasSpecial = src.fin.includes('-');
+				const pHasSpecial = pInfo.fin.includes('-');
+				
+				// 如果源韵母是特殊标记的，候选韵母也必须兼容（最松档放宽到同类）
+				if (srcHasSpecial) {
+					const finOk = src.fin === pInfo.fin || (allowToneRelax && normalizeSpecialFinal(src.fin) === normalizeSpecialFinal(pInfo.fin));
+					const toneOk = allowToneRelax || src.tone === pInfo.tone;
+					if (!finOk || !toneOk) return false;
+				} else {
+					// 源韵母是普通的
+					// 如果候选韵母也是特殊标记，则不能匹配（普通i不能与卷舌音匹配）
+					if (pHasSpecial) return false;
+					
+					// 两者都是普通韵母，按原逻辑处理
+					const variants = buildFinalVariants(src.fin, tier);
+					const finOk = variants.includes(pInfo.fin);
+					const toneOk = allowToneRelax || src.tone === pInfo.tone;
+					if (!finOk || !toneOk) return false;
+				}
 			}
 			return true;
 		};
 
 		const pickFromMap = (fin, originalTone, looseness, forceTone = null) => {
 			const tier = getLoosenessTier(looseness);
-			const finalsToTry = buildFinalVariants(fin, tier);
+			
+			// 对于特殊标记的韵母，不进行扩展
+			let finalsToTry;
+			if (fin.includes('-')) {
+				finalsToTry = [fin];
+			} else {
+				finalsToTry = buildFinalVariants(fin, tier);
+			}
 
 			let targetTones = [];
 			if (forceTone !== null) {
@@ -934,18 +1065,39 @@
 			// 显示匹配结果（字数更多的）
 			const matchedResults = document.getElementById('matchedResults');
 			const matchedResultsList = document.getElementById('matchedResultsList');
-			if (dictResult && dictResult.moreLengths && dictResult.moreLengths.length > 0) {
-				matchedResults.style.display = 'block';
-				matchedResultsList.innerHTML = '';
-				dictResult.moreLengths.forEach(phrase => {
-					const span = document.createElement('span');
-					span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
-					span.textContent = phrase;
-					matchedResultsList.appendChild(span);
-				});
-			} else {
-				matchedResults.style.display = 'none';
+			
+			// 首先清空列表
+			matchedResultsList.innerHTML = '';
+			
+			// 优先展示“少一字”的匹配，其次再展示更多字数的匹配
+			const seen = new Set();
+			const appendPhrase = (phrase) => {
+				if (seen.has(phrase)) return;
+				seen.add(phrase);
+				const span = document.createElement('span');
+				span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
+				span.textContent = phrase;
+				matchedResultsList.appendChild(span);
+			};
+
+			if (dictResult) {
+				// 少一字匹配
+				if (dictResult.lessLength && dictResult.lessLength.length > 0) {
+					const filteredLess = dictResult.lessLength.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
+					const displayLess = filteredLess.length > 0 ? filteredLess : dictResult.lessLength;
+					displayLess.forEach(appendPhrase);
+				}
+
+				// 更多字匹配
+				if (dictResult.moreLengths && dictResult.moreLengths.length > 0) {
+					const filteredMore = dictResult.moreLengths.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
+					const displayMore = filteredMore.length > 0 ? filteredMore : dictResult.moreLengths;
+					displayMore.forEach(appendPhrase);
+				}
 			}
+			
+			// 始终显示容器
+			matchedResults.style.display = 'block';
 			
 			if (dictResult) {
 				console.log('字典查询成功');
@@ -960,46 +1112,72 @@
 				const tier = getLoosenessTier(looseness);
 				const allowToneRelax = tier >= 2;
 				const strongMatches = dictResult.sameLength.filter((phrase) => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
-				const ranked = strongMatches.length > 0 ? strongMatches : dictResult.sameLength;
-				const firstPhrase = Array.from(ranked[0]); // 第一条作为默认生成
+				const ranked = strongMatches.length > 0 ? strongMatches : [];
 				
-				newInfos = tempInfosWithOverrides.map((info, idx) => {
-					// 保留锁定状态
-					if (oldInfos[idx] && oldInfos[idx].locked) {
+				if (ranked.length === 0) {
+					// 字典查询没有通过过滤的结果，退回到逐字选择的模式
+					newInfos = tempInfosWithOverrides.map((info, idx) => {
+						if (info.fin === '-') {
+							return { ...info, generated: info.char, locked: false, forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null };
+						}
+						// 保留锁定状态
+						if (oldInfos[idx] && oldInfos[idx].locked) {
+							return { 
+								...info, 
+								generated: oldInfos[idx].generated || info.char, 
+								locked: true, 
+								forcedTone: oldInfos[idx].forcedTone || null 
+							};
+						}
+						const candidate = pickFromMap(info.fin, info.tone, looseness);
 						return { 
 							...info, 
-							generated: oldInfos[idx].generated || info.char, 
-							candidates: [], // 锁定状态下不显示候选项
-							locked: true, 
-							forcedTone: oldInfos[idx].forcedTone || null 
+							generated: candidate || info.char, 
+							locked: false, 
+							forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
 						};
-					}
+					});
+				} else {
+					const firstPhrase = Array.from(ranked[0]); // 第一条作为默认生成
 					
-					// 为这个位置的所有候选词收集第 idx 个字符
-					const charCandidates = [];
-					for (const phrase of ranked) {
-						const chars = Array.from(phrase);
-						if (idx < chars.length) {
-							const char = chars[idx];
-							if (!charCandidates.includes(char)) {
-								charCandidates.push(char);
+					newInfos = tempInfosWithOverrides.map((info, idx) => {
+						// 保留锁定状态
+						if (oldInfos[idx] && oldInfos[idx].locked) {
+							return { 
+								...info, 
+								generated: oldInfos[idx].generated || info.char, 
+								candidates: [], // 锁定状态下不显示候选项
+								locked: true, 
+								forcedTone: oldInfos[idx].forcedTone || null 
+							};
+						}
+						
+						// 为这个位置的所有候选词收集第 idx 个字符
+						const charCandidates = [];
+						for (const phrase of ranked) {
+							const chars = Array.from(phrase);
+							if (idx < chars.length) {
+								const char = chars[idx];
+								if (!charCandidates.includes(char)) {
+									charCandidates.push(char);
+								}
 							}
 						}
-					}
-					
-					console.log(`位置 ${idx}: candidates = ${JSON.stringify(charCandidates)}`);
-					
-					// 使用排名第一的短语对应位置的字作为 generated
-					const selectedChar = idx < firstPhrase.length ? firstPhrase[idx] : (charCandidates[0] || info.char);
-					
-					return { 
-						...info, 
-						generated: selectedChar, 
-						candidates: charCandidates,
-						locked: false, 
-						forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
-					};
-				});
+						
+						console.log(`位置 ${idx}: candidates = ${JSON.stringify(charCandidates)}`);
+						
+						// 使用排名第一的短语对应位置的字作为 generated
+						const selectedChar = idx < firstPhrase.length ? firstPhrase[idx] : (charCandidates[0] || info.char);
+						
+						return { 
+							...info, 
+							generated: selectedChar, 
+							candidates: charCandidates,
+							locked: false, 
+							forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
+						};
+					});
+				}
 			} else {
 				// 字典查询失败,使用原逻辑
 				newInfos = tempInfosWithOverrides.map((info, idx) => {
@@ -1056,11 +1234,15 @@
 				// 先显示当前生成结果
 				results.push(text);
 				
-				// 然后添加字典中的相同字数结果
+				// 然后添加字典中的相同字数结果（必须通过phraseFitsSource过滤）
 				if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength)) {
+					const looseness = Number(document.getElementById('looseness').value);
 					for (const phrase of dictResult.sameLength) {
 						if (phrase !== text && !results.includes(phrase)) {
-							results.push(phrase);
+							// 严格检查该词是否真正符合源词的韵脚要求
+							if (phraseFitsSource(phrase, infos, looseness)) {
+								results.push(phrase);
+							}
 						}
 					}
 				}
@@ -1160,36 +1342,36 @@
 					name: '本地优化词库',
 					url: './dict_optimized.json',
 					processor: (data) => {
-					const chars = new Set();
-					// Support multiple formats
-					if (Array.isArray(data)) {
-						// Array of strings or objects
-						data.forEach(item => {
-							if (typeof item === 'string') {
-								Array.from(item).forEach(ch => {
-									if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
-								});
-							} else if (item.word || item.char) {
-								const word = item.word || item.char;
-								Array.from(word).forEach(ch => {
-									if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
-								});
-							}
-						});
-					} else if (typeof data === 'object') {
-						// Object with character arrays by rhyme
-						Object.values(data).forEach(value => {
-							if (Array.isArray(value)) {
-								value.forEach(ch => {
-									if (typeof ch === 'string' && /[\u4e00-\u9fa5]/.test(ch)) {
-										chars.add(ch);
-									}
-								});
-							}
-						});
+						const chars = new Set();
+						// Support multiple formats
+						if (Array.isArray(data)) {
+							// Array of strings or objects
+							data.forEach(item => {
+								if (typeof item === 'string') {
+									Array.from(item).forEach(ch => {
+										if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
+									});
+								} else if (item && (item.word || item.char)) {
+									const word = item.word || item.char;
+									Array.from(word).forEach(ch => {
+										if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
+									});
+								}
+							});
+						} else if (data && typeof data === 'object') {
+							// Object with character arrays by rhyme
+							Object.values(data).forEach(value => {
+								if (Array.isArray(value)) {
+									value.forEach(ch => {
+										if (typeof ch === 'string' && /[\u4e00-\u9fa5]/.test(ch)) {
+											chars.add(ch);
+										}
+									});
+								}
+							});
+						}
+						return Array.from(chars);
 					}
-					return Array.from(chars);啊
-				}
 				}
 			];
 		let loadedChars = null;

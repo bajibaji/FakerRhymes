@@ -36,12 +36,16 @@
 
     .shell {
       width: min(800px, 100%);
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0))
+        , var(--panel);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
       overflow: hidden;
       padding: 28px 28px 20px;
+      position: relative;
+      z-index: 1;
     }
 
     h1 { margin: 0 0 6px; font-size: 26px; }
@@ -49,21 +53,37 @@
 
     textarea {
       width: 100%;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      background: rgba(20, 25, 40, 0.8) !important;
+      border: 2px solid #22d3ee !important;
+      border-radius: 14px;
       padding: 14px;
-      color: var(--text);
+      color: #ffffff !important;
+      caret-color: #22d3ee;
       font-size: 15px;
-      min-height: 160px;
+      min-height: 180px;
       resize: vertical;
       outline: none;
-      transition: border 0.2s ease, box-shadow 0.2s ease;
+      box-shadow:
+        0 0 0 3px rgba(34, 211, 238, 0.3),
+        0 10px 28px rgba(0, 0, 0, 0.55);
+      transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      position: relative !important;
+      z-index: 10 !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      display: block !important;
     }
 
     textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+      border-color: #38bdf8;
+      box-shadow:
+        0 0 0 2px rgba(34, 211, 238, 0.4),
+        0 12px 32px rgba(0, 0, 0, 0.6);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    textarea::placeholder {
+      color: rgba(255, 255, 255, 0.9);
     }
 
     .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
@@ -94,6 +114,19 @@
     .shell, textarea, .list, .export-box, .footer {
       transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
+
+    /* 背景色块，避免遮挡主体 */
+    .bg-blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      z-index: 0;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+    .blob-1 { top: -15%; left: -20%; width: 50vw; height: 50vw; background: var(--accent); opacity: 0.18; }
+    .blob-2 { bottom: -10%; right: -15%; width: 40vw; height: 40vw; background: var(--accent-2); opacity: 0.18; }
+    .blob-3 { top: 40%; left: 30%; width: 30vw; height: 30vw; background: #3b82f6; opacity: 0.12; }
 
     .btn.ghost {
       background: transparent;
@@ -300,7 +333,8 @@
       .from("textarea", {
         y: 20,
         opacity: 0,
-        duration: 0.8
+        duration: 0.8,
+        clearProps: "all"
       }, "-=0.6")
       .from(".btn", {
         y: 20,
