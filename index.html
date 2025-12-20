@@ -397,7 +397,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.3 beta fixed</h1>
+			<h1>连押同调韵脚生成器 v1.4 beta fixed</h1>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
 
@@ -417,7 +417,8 @@
 					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
 					<input type="range" id="looseness" min="0" max="1" step="0.5" value="0.0" />
 				</div>
-				<div class="hint">严格：同韵同调  | 中等：韵母放宽（前后鼻音等 | 最松：韵母进一步放宽，忽略声调。</div>
+				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
+				<div class="hint">-越宽松需要查询的时间越长，请耐心等待-</div>
 				<div class="hint">-越宽松需要查询的时间越长，请耐心等待-</div>
 			</section>
 
@@ -825,24 +826,19 @@
 								// 检查自定义词是否以查询key结尾
 								const phraseInfos = Array.from(phrase).map(ch => toInfo(ch)).filter(Boolean);
 								if (phraseInfos.length > 0) {
-									// 修改：使用当前查询长度 infos.length，而不是硬编码的 2
-									const checkLen = infos.length;
-									if (phraseInfos.length >= checkLen) {
-										const targetInfos = phraseInfos.slice(-checkLen);
-										const phraseKeyParts = targetInfos.map(info => `${info.fin}${info.tone}`);
-										const phraseKey = phraseKeyParts.join('_');
-										const phraseVariants = buildKeyVariants(phraseKey);
-										
-										const hit = phraseVariants.some(v => queryVariantSet.has(v));
-						
-										if (hit) {
-											const phraseLen = Array.from(phrase).length;
-											if (!matchedByWordCount[phraseLen]) {
-												matchedByWordCount[phraseLen] = [];
-											}
-											if (!matchedByWordCount[phraseLen].includes(phrase)) {
-												matchedByWordCount[phraseLen].push(phrase);
-											}
+									const lastTwoPhrase = phraseInfos.length >= 2 ? phraseInfos.slice(-2) : phraseInfos;
+													const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
+													const phraseKey = phraseKeyParts.join('_');
+													const phraseVariants = buildKeyVariants(phraseKey);
+													const hit = phraseVariants.some(v => queryVariantSet.has(v));
+									
+													if (hit) {
+										const phraseLen = Array.from(phrase).length;
+										if (!matchedByWordCount[phraseLen]) {
+											matchedByWordCount[phraseLen] = [];
+										}
+										if (!matchedByWordCount[phraseLen].includes(phrase)) {
+											matchedByWordCount[phraseLen].push(phrase);
 										}
 									}
 								}
@@ -1332,112 +1328,246 @@
 			btn.textContent = '⏳ 加载中...';
 			btn.disabled = true;
 
-			const dictSources = [
-				{
-					name: '本地优化词库',
-					url: './dict_optimized.json',
-					processor: (data) => {
-						const chars = new Set();
-						// Support multiple formats
-						if (Array.isArray(data)) {
-							// Array of strings or objects
-							data.forEach(item => {
-								if (typeof item === 'string') {
-									Array.from(item).forEach(ch => {
-										if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
-									});
-								} else if (item && (item.word || item.char)) {
-									const word = item.word || item.char;
-									Array.from(word).forEach(ch => {
-										if (/[\u4e00-\u9fa5]/.test(ch)) chars.add(ch);
-									});
+			// Check if Web Worker is supported
+			if (typeof Worker === 'undefined') {
+				// Fallback to synchronous loading if Worker not supported
+				console.warn('Web Worker not supported, using fallback method');
+				await loadOnlineDictFallback();
+				return;
+			}
+
+			try {
+				// Create progress display element if not exists
+				let progressBar = document.getElementById('dictProgressBar');
+				if (!progressBar) {
+					progressBar = document.createElement('div');
+					progressBar.id = 'dictProgressBar';
+					progressBar.style.cssText = `
+						position: fixed;
+						top: 0;
+						left: 0;
+						right: 0;
+						height: 3px;
+						background: linear-gradient(90deg, #7c3aed, #22d3ee);
+						z-index: 9999;
+						display: none;
+						width: 0%;
+						transition: width 0.3s ease;
+					`;
+					document.body.insertBefore(progressBar, document.body.firstChild);
+				}
+				progressBar.style.display = 'block';
+
+				// Use Web Worker for background processing
+				const worker = new Worker('./dict-worker.js');
+
+				const dictSources = [
+					{
+						name: '本地优化词库',
+						url: './dict_optimized.json'
+					}
+				];
+
+				return new Promise((resolve, reject) => {
+					const timeout = setTimeout(() => {
+						worker.terminate();
+						reject(new Error('词库加载超时，请检查网络连接'));
+					}, 120000); // 2 minutes timeout
+
+					worker.onmessage = (event) => {
+						const { type, message, data, progress, percent } = event.data;
+
+						if (type === 'progress' || type === 'parsing') {
+							btn.textContent = message || `加载中... ${percent || progress}%`;
+							if (percent) {
+								progressBar.style.width = percent + '%';
+							}
+						}
+
+						if (type === 'success') {
+							clearTimeout(timeout);
+							worker.terminate();
+
+							const { chars, sourceName, stats } = data;
+							try {
+								localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars));
+								localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
+								localStorage.setItem('ONLINE_DICT_SOURCE', sourceName);
+								// Store detailed stats for reference
+								if (stats) {
+									localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
+								}
+
+								// Refresh bank
+								if (window.refreshRhymeBank) window.refreshRhymeBank();
+								bankMap = registerBank();
+
+								btn.textContent = `✓ 已加载 ${chars.length} 字`;
+								btn.style.background = 'rgba(34, 211, 238, 0.2)';
+								progressBar.style.width = '100%';
+
+								const dictStatus = document.getElementById('dictStatus');
+								const dictStatusText = document.getElementById('dictStatusText');
+								const date = new Date();
+								dictStatus.style.display = 'block';
+								
+								// Build detailed status text with stats
+								let statusText = `📖 词库：${chars.length} 个唯一汉字（${sourceName}）`;
+								if (stats && stats.totalChars) {
+									statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
+								}
+								statusText += ` | ${date.toLocaleString('zh-CN')}`;
+								dictStatusText.textContent = statusText;
+
+								setTimeout(() => {
+									btn.innerHTML = `📚 已缓存 ${chars.length} 字`;
+									btn.disabled = false;
+									btn.style.background = '';
+									progressBar.style.display = 'none';
+								}, 1500);
+
+								resolve();
+							} catch (err) {
+								reject(err);
+							}
+						}
+
+						if (type === 'error') {
+							clearTimeout(timeout);
+							worker.terminate();
+							reject(new Error(message));
+						}
+					};
+
+					worker.onerror = (err) => {
+						clearTimeout(timeout);
+						worker.terminate();
+						reject(err);
+					};
+
+					// Send message to worker
+					worker.postMessage({
+						action: 'loadAndProcess',
+						payload: { dictSources }
+					});
+				});
+			} catch (err) {
+				console.error('词库加载失败:', err);
+				btn.textContent = `✗ ${err.message || '加载失败'}`;
+				btn.style.background = 'rgba(239, 68, 68, 0.2)';
+				progressBar?.style.display && (progressBar.style.display = 'none');
+
+				setTimeout(() => {
+					btn.textContent = originalText;
+					btn.disabled = false;
+					btn.style.background = '';
+				}, 3000);
+			}
+		};
+
+		const loadOnlineDictFallback = async () => {
+			// Synchronous fallback for browsers without Web Worker support
+			const btn = document.getElementById('loadDictBtn');
+			const originalText = btn.textContent;
+
+			try {
+				const response = await fetch('./dict_optimized.json', {
+					method: 'GET',
+					headers: { 'Accept': 'application/json' }
+				});
+
+				if (!response.ok) throw new Error('HTTP ' + response.status);
+
+				btn.textContent = '⏳ 解析中...';
+				const data = await response.json();
+				const chars = new Set();
+				let stats = {
+					totalStrings: 0,
+					totalChars: 0,
+					uniqueChars: 0,
+					categories: 0
+				};
+
+				if (Array.isArray(data)) {
+					stats.categories = 1;
+					data.forEach((item, idx) => {
+						if (idx % 5000 === 0) {
+							btn.textContent = `⏳ 解析中... ${Math.round((idx / data.length) * 100)}%`;
+						}
+						if (typeof item === 'string') {
+							stats.totalStrings++;
+							Array.from(item).forEach(ch => {
+								if (/[\u4e00-\u9fa5]/.test(ch)) {
+									stats.totalChars++;
+									chars.add(ch);
 								}
 							});
-						} else if (data && typeof data === 'object') {
-							// Object with character arrays by rhyme
-							Object.values(data).forEach(value => {
-								if (Array.isArray(value)) {
-									value.forEach(ch => {
-										if (typeof ch === 'string' && /[\u4e00-\u9fa5]/.test(ch)) {
+						}
+					});
+				} else if (data && typeof data === 'object') {
+					const entries = Object.entries(data);
+					stats.categories = entries.length;
+					entries.forEach(([, value], idx) => {
+						if (idx % 500 === 0) {
+							btn.textContent = `⏳ 解析中... ${Math.round((idx / entries.length) * 100)}%`;
+						}
+						if (Array.isArray(value)) {
+							stats.totalStrings += value.length;
+							value.forEach(item => {
+								if (typeof item === 'string') {
+									Array.from(item).forEach(ch => {
+										if (/[\u4e00-\u9fa5]/.test(ch)) {
+											stats.totalChars++;
 											chars.add(ch);
 										}
 									});
 								}
 							});
 						}
-						return Array.from(chars);
-					}
+					});
 				}
-			];
-		let loadedChars = null;
-		let successSource = null;
-		
-		for (const source of dictSources) {
-			try {
-				btn.textContent = `⏳ ${source.name}...`;
+
+				const charArray = Array.from(chars);
+				stats.uniqueChars = charArray.length;
 				
-				const response = await fetch(source.url, { 
-					method: 'GET',
-					headers: { 'Accept': 'application/json' }
-				});
+				localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(charArray));
+				localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
+				localStorage.setItem('ONLINE_DICT_SOURCE', '本地优化词库');
+				localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
+
+				if (window.refreshRhymeBank) window.refreshRhymeBank();
+				bankMap = registerBank();
+
+				btn.textContent = `✓ 已加载 ${charArray.length} 字`;
+				btn.style.background = 'rgba(34, 211, 238, 0.2)';
+
+				const dictStatus = document.getElementById('dictStatus');
+				const dictStatusText = document.getElementById('dictStatusText');
+				dictStatus.style.display = 'block';
 				
-				if (!response.ok) throw new Error('HTTP ' + response.status);
-				
-				const data = await response.json();
-				const chars = source.processor(data);
-				
-				if (chars && chars.length > 0) {
-					loadedChars = chars;
-					successSource = source.name;
-					break;
+				let statusText = `📖 词库：${charArray.length} 个唯一汉字（本地优化词库）`;
+				if (stats.totalChars > 0) {
+					statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
 				}
+				statusText += ` | ${new Date().toLocaleString('zh-CN')}`;
+				dictStatusText.textContent = statusText;
+
+				setTimeout(() => {
+					btn.innerHTML = `📚 已缓存 ${charArray.length} 字`;
+					btn.disabled = false;
+					btn.style.background = '';
+				}, 1500);
 			} catch (err) {
-				console.warn(`${source.name} 加载失败:`, err);
-				continue;
+				console.error('词库加载失败:', err);
+				btn.textContent = '✗ 加载失败';
+				btn.style.background = 'rgba(239, 68, 68, 0.2)';
+
+				setTimeout(() => {
+					btn.textContent = originalText;
+					btn.disabled = false;
+					btn.style.background = '';
+				}, 3000);
 			}
-		}
-
-		if (!loadedChars || loadedChars.length === 0) {
-			throw new Error('所有词库源均加载失败');
-		}
-
-		try {
-			const chars = loadedChars;
-			localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars));
-			localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
-			localStorage.setItem('ONLINE_DICT_SOURCE', successSource);
-			
-			// Refresh bank
-			if (window.refreshRhymeBank) window.refreshRhymeBank();
-			bankMap = registerBank();
-			
-			btn.textContent = `✓ 已加载 ${chars.length} 字`;
-			btn.style.background = 'rgba(34, 211, 238, 0.2)';
-			
-			// Update status display
-			const dictStatus = document.getElementById('dictStatus');
-			const dictStatusText = document.getElementById('dictStatusText');
-			const date = new Date();
-			dictStatus.style.display = 'block';
-			dictStatusText.textContent = `📖 词库：${chars.length} 个汉字（${successSource}）| ${date.toLocaleString('zh-CN')}`;
-			
-			setTimeout(() => {
-				btn.innerHTML = `📚 已缓存 ${chars.length} 字`;
-				btn.disabled = false;
-				btn.style.background = '';
-			}, 2000);
-			
-		} catch (err) {
-			console.error('词库保存失败:', err);
-			btn.textContent = '✗ 保存失败';
-			btn.style.background = 'rgba(239, 68, 68, 0.2)';
-			
-			setTimeout(() => {
-				btn.textContent = originalText;
-				btn.disabled = false;
-				btn.style.background = '';
-			}, 2000);
-		}
 		};
 
 		// Debounce 函数
@@ -1484,13 +1614,77 @@
 							loadDictBtn.title = '点击重新加载词库';
 							
 							dictStatus.style.display = 'block';
-							dictStatusText.textContent = `📖 词库：${chars.length} 个汉字（${source}）| ${date.toLocaleString('zh-CN')}`;
+							
+							// Try to load and display stats if available
+							let statusText = `📖 词库：${chars.length} 个唯一汉字（${source}）`;
+							try {
+								const statsStr = localStorage.getItem('ONLINE_DICT_STATS');
+								if (statsStr) {
+									const stats = JSON.parse(statsStr);
+									if (stats.totalChars > 0) {
+										statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
+									}
+								}
+							} catch (e) {}
+							
+							statusText += ` | ${date.toLocaleString('zh-CN')}`;
+							dictStatusText.textContent = statusText;
 						} catch (e) {}
 					}
 				}
 			};
 			
 			updateDictStatus();
+
+			// Expose debug utilities to window for console access
+			window.dictDebug = {
+				showStats: function() {
+					const stats = localStorage.getItem('ONLINE_DICT_STATS');
+					const cache = localStorage.getItem('ONLINE_DICT_CACHE');
+					const source = localStorage.getItem('ONLINE_DICT_SOURCE');
+					const time = localStorage.getItem('ONLINE_DICT_TIME');
+					
+					console.clear();
+					console.log('%c词库统计信息', 'font-size:16px; font-weight:bold; color:#7c3aed');
+					console.log('来源:', source || '未加载');
+					console.log('加载时间:', time ? new Date(parseInt(time)).toLocaleString('zh-CN') : '未加载');
+					
+					if (cache) {
+						const chars = JSON.parse(cache);
+						console.log('唯一汉字数:', chars.length);
+					}
+					
+					if (stats) {
+						const s = JSON.parse(stats);
+						console.table({
+							'分类数': s.categories.toLocaleString(),
+							'条目数（字符串）': s.totalStrings.toLocaleString(),
+							'字符总数（去重前）': s.totalChars.toLocaleString(),
+							'唯一汉字数': s.uniqueChars.toLocaleString(),
+							'重复度': ((1 - s.uniqueChars / s.totalChars) * 100).toFixed(2) + '%'
+						});
+					} else {
+						console.log('（无详细统计，可重新加载词库获取）');
+					}
+				},
+				
+				cacheSize: function() {
+					let total = 0;
+					for (let key in localStorage) {
+						if (key.startsWith('ONLINE_DICT_')) {
+							const size = localStorage[key].length;
+							console.log(`${key}: ${(size / 1024).toFixed(2)} KB`);
+							total += size;
+						}
+					}
+					console.log(`总计: ${(total / 1024 / 1024).toFixed(2)} MB`);
+				}
+			};
+			
+			console.log('%c💡 提示', 'color:#22d3ee; font-weight:bold');
+			console.log('在控制台执行以下命令查看词库信息：');
+			console.log('  • window.dictDebug.showStats()  - 显示详细统计');
+			console.log('  • window.dictDebug.cacheSize()  - 显示缓存大小');
 
 			loadScriptSeq([...cdnList], (err, url) => {
 				if (err) {
