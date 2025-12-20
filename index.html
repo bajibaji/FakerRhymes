@@ -404,7 +404,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.5 beta</h1>
+			<h1>连押同调韵脚生成器 v1.5.1 beta</h1>
 			<p class="credit">©TRUEPEAK 2025 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -427,7 +427,9 @@
 				</div>
 				<div style="color:brown; font-size: small; font-weight: bold; text-align: center;" >*使用前请先加载词库*</div>
 				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
-				<div class="hint">-越宽松需要查询的时间越长，请耐心等待-</div>
+				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
+				<div class="hint">- 越宽松需要查询的时间越长，请耐心等待</div>
+				
 				
 			</section>
 
@@ -464,7 +466,7 @@
 			</div>
 		</section>
 
-		<div class="footer">基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
+		<div class="footer">词库基于雾凇拼音词库以及中华新华字典数据库以及清华大学开放中文词库，查询算法基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
 	</div>
 
 	<script src="./data.js"></script>
@@ -1031,12 +1033,12 @@
 			const src = document.getElementById('source').value.trim();
 			const looseness = Number(document.getElementById('looseness').value);
 			if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
-				render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null);
+				render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null, '');
 				return;
 			}
 			if (bankMap.size === 0) bankMap = registerBank();
 			if (!src) {
-				render([], '等待输入...', null);
+				render([], '等待输入...', null, '');
 				return;
 			}
 
@@ -1062,6 +1064,9 @@
 			const dictResult = queryDict(tempInfosWithOverrides, looseness);
 			currentDictResult = dictResult; // 保存到全局变量供render使用
 			
+			// 获取用户输入的原词（用于排除）
+			const userInput = tempInfosWithOverrides.map(info => info.char).join('');
+			
 			// 显示匹配结果（字数更多的）
 			const matchedResults = document.getElementById('matchedResults');
 			const matchedResultsList = document.getElementById('matchedResultsList');
@@ -1073,6 +1078,10 @@
 			const seen = new Set();
 			const appendPhrase = (phrase) => {
 				if (seen.has(phrase)) return;
+				// 排除与用户输入相同的词
+				if (phrase === userInput) return;
+				// 排除包含用户输入词的词
+				if (phrase.includes(userInput)) return;
 				seen.add(phrase);
 				const span = document.createElement('span');
 				span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
@@ -1111,7 +1120,10 @@
 				// 优先逐字韵脚匹配（所有字都要满足源词的韵母/声调规则）；若无，再退回“末两字”匹配结果
 				const tier = getLoosenessTier(looseness);
 				const allowToneRelax = tier >= 2;
-				const strongMatches = dictResult.sameLength.filter((phrase) => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
+				const strongMatches = dictResult.sameLength.filter((phrase) => 
+					// 排除与用户输入相同的词和包含用户输入的词
+					phrase !== userInput && !phrase.includes(userInput) && phraseFitsSource(phrase, tempInfosWithOverrides, looseness)
+				);
 				const ranked = strongMatches.length > 0 ? strongMatches : [];
 				
 				if (ranked.length === 0) {
@@ -1164,65 +1176,68 @@
 							}
 						}
 						
-						console.log(`位置 ${idx}: candidates = ${JSON.stringify(charCandidates)}`);
-						
-						// 使用排名第一的短语对应位置的字作为 generated
-						const selectedChar = idx < firstPhrase.length ? firstPhrase[idx] : (charCandidates[0] || info.char);
-						
-						return { 
-							...info, 
-							generated: selectedChar, 
-							candidates: charCandidates,
-							locked: false, 
-							forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
-						};
+					// 排除会使结果与用户输入相同的字符
+					const filteredCandidates = charCandidates.filter(char => {
+						// 构建假设选择该字符后的完整词（使用firstPhrase作为基准）
+						const testPhrase = firstPhrase.map((c, i) => 
+							i === idx ? char : c
+						).join('');
+						return testPhrase !== userInput;
 					});
-				}
-			} else {
-				// 字典查询失败,使用原逻辑
-				newInfos = tempInfosWithOverrides.map((info, idx) => {
-					if (info.fin === '-') {
-						return { ...info, generated: info.char, locked: false, forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null };
+					
+					console.log(`位置 ${idx}: candidates = ${JSON.stringify(filteredCandidates)}`);
+					
+					// 使用排名第一的短语对应位置的字作为 generated，但要避免生成用户输入
+					let selectedChar = firstPhrase[idx];
+					// 如果 firstPhrase 会导致与用户输入相同，使用过滤后的候选
+					const wouldMatchInput = firstPhrase.join('') === userInput;
+					if (wouldMatchInput && filteredCandidates.length > 0) {
+						selectedChar = filteredCandidates[0];
+					} else if (wouldMatchInput && charCandidates.length > 0) {
+						// 如果过滤后没有候选，尝试从原始候选中找一个不同的
+						const differentChar = charCandidates.find(c => c !== info.char);
+						selectedChar = differentChar || charCandidates[0];
 					}
-					// 保留锁定状态
-					if (oldInfos[idx] && oldInfos[idx].locked) {
-						return { 
-							...info, 
-							generated: oldInfos[idx].generated || info.char, 
-							locked: true, 
-							forcedTone: oldInfos[idx].forcedTone || null 
-						};
-					}
-					const candidate = pickFromMap(info.fin, info.tone, looseness);
+					
 					return { 
 						...info, 
-						generated: candidate || info.char, 
+						generated: selectedChar, 
+						candidates: filteredCandidates.length > 0 ? filteredCandidates : charCandidates,
 						locked: false, 
 						forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
 					};
 				});
 			}
-			
-			currentInfos = newInfos;
-			render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult);
-		};
+		} else {
+			// 字典查询失败,使用原逻辑
+			newInfos = tempInfosWithOverrides.map((info, idx) => {
+				if (info.fin === '-') {
+					return { ...info, generated: info.char, locked: false, forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null };
+				}
+				// 保留锁定状态
+				if (oldInfos[idx] && oldInfos[idx].locked) {
+					return { 
+						...info, 
+						generated: oldInfos[idx].generated || info.char, 
+						locked: true, 
+						forcedTone: oldInfos[idx].forcedTone || null 
+					};
+				}
+				const candidate = pickFromMap(info.fin, info.tone, looseness);
+				return { 
+					...info, 
+					generated: candidate || info.char, 
+					locked: false, 
+					forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
+				};
+			});
+		}
+		
+		currentInfos = newInfos;
+		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
+	};
 
-		const updateSingleChar = (index, newTone) => {
-			const info = currentInfos[index];
-			if (!info || !info.fin || info.fin === '-') return;
-			
-			const looseness = Number(document.getElementById('looseness').value);
-			// allow explicit user tone change even if locked (user-initiated)
-			info.forcedTone = newTone;
-			info.tone = newTone !== null ? newTone : info.baseTone;
-			const candidate = pickFromMap(info.fin, info.tone, looseness, newTone);
-			info.generated = candidate || info.char;
-			
-			// Re-run process with updated tone
-			process();
-		};
-
-		const render = (infos, text, dictResult) => {
+	const render = (infos, text, dictResult, userInput) => {
 			// 更新右侧生成结果面板
 			const output = document.getElementById('output');
 			const badges = document.getElementById('badges');
@@ -1231,14 +1246,17 @@
 				// 显示相同字数的所有匹配结果（来自dictResult）
 				const results = [];
 				
-				// 先显示当前生成结果
-				results.push(text);
+				// 先显示当前生成结果（排除与用户输入相同的词）
+				if (text && text !== userInput) {
+					results.push(text);
+				}
 				
 				// 然后添加字典中的相同字数结果（必须通过phraseFitsSource过滤）
 				if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength)) {
 					const looseness = Number(document.getElementById('looseness').value);
 					for (const phrase of dictResult.sameLength) {
-						if (phrase !== text && !results.includes(phrase)) {
+						// 排除用户输入和已经在结果中的词
+						if (phrase !== text && phrase !== userInput && !results.includes(phrase)) {
 							// 严格检查该词是否真正符合源词的韵脚要求
 							if (phraseFitsSource(phrase, infos, looseness)) {
 								results.push(phrase);
