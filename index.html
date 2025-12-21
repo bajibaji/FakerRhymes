@@ -404,7 +404,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.5.1 beta</h1>
+			<h1>连押同调韵脚生成器 v1.5.2</h1>
 			<p class="credit">©TRUEPEAK 2025 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -698,7 +698,8 @@
 			{ name: '梭波辙', finals: ['o', 'e', 'uo'] },
 			{ name: '乜斜辙', finals: ['ie', 'ue', 've'] },
 			{ name: '言前辙', finals: ['an', 'ian', 'uan', 'van', 'üan'] },
-			{ name: '人辰辙', finals: ['en', 'in', 'un', 'vn', 'ün'] },
+			{ name: '人辰辙-深', finals: ['en', 'un'] },
+			{ name: '人辰辙-亲', finals: ['in', 'vn', 'ün'] },
 			{ name: '江阳辙', finals: ['ang', 'iang', 'uang'] },
 			{ name: '中东辙', finals: ['eng', 'ing', 'ong', 'iong'] },
 			{ name: '一七辙', finals: ['i', 'v', 'er', 'ü', 'i-flat', 'i-retro'] },
@@ -919,9 +920,14 @@
 			const groupAnAng = ['an', 'ian', 'uan', 'van', 'üan', 'ang', 'iang', 'uang'];
 			if (groupAnAng.includes(fin)) return groupAnAng;
 
-			// 2. 前后鼻音合并：人辰(en) + 中东(eng)
-			const groupEnEng = ['en', 'in', 'un', 'vn', 'ün', 'eng', 'ing', 'ong', 'iong'];
+			// 2. 前后鼻音合并：
+			// 人辰-深(en/un) + 中东-eng(eng/ong) -> 实际上 en 和 eng 押韵更近
+			const groupEnEng = ['en', 'un', 'eng', 'ong', 'iong'];
 			if (groupEnEng.includes(fin)) return groupEnEng;
+
+			// 人辰-亲(in/vn/ün) + 中东-ing(ing) -> 实际上 in 和 ing 押韵更近
+			const groupInIng = ['in', 'vn', 'ün', 'ing'];
+			if (groupInIng.includes(fin)) return groupInIng;
 
 			// 3. 其他情况（包括 i-flat/i-retro 归为一七辙），使用十三辙
 			const track = thirteenTracks.find(t => t.finals.includes(fin));
