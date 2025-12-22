@@ -313,6 +313,42 @@
 			gap: 6px;
 		}
 
+		.fin-input, .tone-select {
+			background: transparent;
+			border: 1px solid transparent;
+			border-radius: 4px;
+			padding: 0 2px !important;
+			color: var(--text);
+			font-size: 13px;
+			transition: all 0.2s ease;
+			vertical-align: middle;
+			height: 22px !important;
+			min-height: 0 !important;
+			line-height: 22px;
+		}
+
+		.fin-input:hover, .tone-select:hover {
+			border-color: var(--border);
+			background: var(--card);
+		}
+
+		.fin-input:focus, .tone-select:focus {
+			border-color: var(--accent);
+			background: var(--card);
+			outline: none;
+			box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+		}
+
+		.fin-input {
+			width: 32px !important;
+			text-align: center;
+		}
+
+		.tone-select {
+			cursor: pointer;
+			width: auto;
+		}
+
 		table {
 			width: 100%;
 			border-collapse: collapse;
@@ -404,7 +440,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.5.2</h1>
+			<h1>连押同调韵脚生成器 v1.5.5</h1>
 			<p class="credit">©TRUEPEAK 2025 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -442,7 +478,7 @@
 		</main>
 
 		<section class="panel" style="margin: 0 32px 20px;">
-			<label style="margin-bottom: 14px;">解析详情</label>
+			<label style="margin-bottom: 14px;">音调选择</label>
 			<table>
 				<thead>
 					<tr>
@@ -472,6 +508,10 @@
 	<script src="./data.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" onerror="console.warn('GSAP CDN加载失败')"></script>
 	<script>
+		// 开发模式开关（生产环境设为false以禁用console.log）
+		const DEV_MODE = false;
+		const devLog = (...args) => { if (DEV_MODE) console.log(...args); };
+		
 		// GSAP Animations
 		document.addEventListener("DOMContentLoaded", () => {
 			// 检查GSAP是否加载成功
@@ -531,34 +571,34 @@
 				gsap.to(btn, { scale: 1.05, duration: 0.3, ease: "back.out(1.7)" });
 			});
 			btn.addEventListener("mouseleave", () => {
-					gsap.to(btn, { scale: 0.92, duration: 0.1, ease: "power1.out" });
-				});
-				btn.addEventListener("mouseup", () => {
-					gsap.to(btn, { scale: 1.05, duration: 0.4, ease: "elastic.out(1, 0.3)" });
-				});
+				gsap.to(btn, { scale: 0.92, duration: 0.1, ease: "power1.out" });
 			});
-            
-            // Animate output when generated
-            const goBtn = document.getElementById('go');
-            goBtn.addEventListener('click', () => {
-                 gsap.fromTo("#output", { opacity: 0.5, y: 5 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" });
-                 gsap.fromTo("#badges", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.4, delay: 0.1, ease: "power2.out" });
-                 // Table rows animation
-                 setTimeout(() => {
-                     gsap.from("#detailBody tr", {
-                        opacity: 0,
-                        x: -10,
-                        stagger: 0.05,
-                        duration: 0.4,
-                        ease: "power2.out",
-						clearProps: "all"
-                     });
-                 }, 50);
-            });
+			btn.addEventListener("mouseup", () => {
+				gsap.to(btn, { scale: 1.05, duration: 0.4, ease: "elastic.out(1, 0.3)" });
+			});
 		});
-	</script>
+		
+		// Animate output when generated
+		const goBtn = document.getElementById('go');
+		goBtn.addEventListener('click', () => {
+			gsap.fromTo("#output", { opacity: 0.5, y: 5 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" });
+			gsap.fromTo("#badges", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.4, delay: 0.1, ease: "power2.out" });
+			// Table rows animation
+			setTimeout(() => {
+				gsap.from("#detailBody tr", {
+					opacity: 0,
+					x: -10,
+					stagger: 0.05,
+					duration: 0.4,
+					ease: "power2.out",
+					clearProps: "all"
+				});
+			}, 50);
+		});
+	});
+</script>
 
-	<script>
+<script>
 		const cdnList = [
 			'https://unpkg.com/pinyin-pro@3.27.0/dist/index.js',
 			'https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js',
@@ -599,17 +639,17 @@
 				const resp = await fetch('dict_optimized.json');
 				const text = await resp.text();
 				dict = JSON.parse(text);
-				console.log('字典加载成功,共', Object.keys(dict).length, '条');
-			} catch(e) {
-				console.error('字典加载失败:', e);
-			}
-		};
+			devLog('字典加载成功,共', Object.keys(dict).length, '条');
+		} catch(e) {
+			console.error('字典加载失败:', e);
+		}
+	};
 
-		const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
+	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
-		// 将键统一转成 v 形式，并生成 v/u 双版本，兼容词典中可能用 u 表示 ü 的情况
-		const buildKeyVariants = (key) => {
-			const base = String(key).replace(/ü/g, 'v').replace(/u:/g, 'v');
+	// 将键统一转成 v 形式，并生成 v/u 双版本，兼容词典中可能用 u 表示 ü 的情况
+	const buildKeyVariants = (key) => {
+		const base = String(key).replace(/ü/g, 'v').replace(/u:/g, 'v');
 			const variants = new Set([base, base.replace(/v/g, 'u')]);
 			return Array.from(variants);
 		};
@@ -889,7 +929,7 @@
 				
 				if (shorterResult && shorterResult.sameLength && shorterResult.sameLength.length > 0) {
 					sameLengthResults.push(...shorterResult.sameLength);
-					console.log(`降级查询成功：从 ${sourceLength} 字降到 ${currentLength} 字`);
+					devLog(`降级查询成功：从 ${sourceLength} 字降到 ${currentLength} 字`);
 					break;
 				}
 				
@@ -1101,11 +1141,49 @@
 					displayLess.forEach(appendPhrase);
 				}
 
-				// 更多字匹配
+				// 更多字匹配：两字词全部展示，超过2字的按尾部两字分组随机展示一个
 				if (dictResult.moreLengths && dictResult.moreLengths.length > 0) {
 					const filteredMore = dictResult.moreLengths.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
 					const displayMore = filteredMore.length > 0 ? filteredMore : dictResult.moreLengths;
-					displayMore.forEach(appendPhrase);
+					
+					// 按字数分组
+					const groupedByLength = {};
+					for (const phrase of displayMore) {
+						const len = Array.from(phrase).length;
+						if (!groupedByLength[len]) {
+							groupedByLength[len] = [];
+						}
+						groupedByLength[len].push(phrase);
+					}
+					
+					// 对每个字数组处理
+					for (const [len, phrases] of Object.entries(groupedByLength)) {
+						const lengthNum = parseInt(len);
+						
+						// 两字词直接全部展示
+						if (lengthNum <= 2) {
+							phrases.forEach(appendPhrase);
+							continue;
+						}
+						
+						// 超过2字的按尾部两字分组并随机选一个
+						const groupedByTail = {};
+						for (const phrase of phrases) {
+							const chars = Array.from(phrase);
+							// 获取尾部两个字
+							const tail = chars.length >= 2 ? chars.slice(-2).join('') : phrase;
+							if (!groupedByTail[tail]) {
+								groupedByTail[tail] = [];
+							}
+							groupedByTail[tail].push(phrase);
+						}
+						
+						// 从每个尾部分组中随机选一个
+						for (const [tail, phrasesWithSameTail] of Object.entries(groupedByTail)) {
+							const randomIndex = Math.floor(Math.random() * phrasesWithSameTail.length);
+							appendPhrase(phrasesWithSameTail[randomIndex]);
+						}
+					}
 				}
 			}
 			
@@ -1113,9 +1191,9 @@
 			matchedResults.style.display = 'block';
 			
 			if (dictResult) {
-				console.log('字典查询成功');
-				console.log('相同字数结果:', dictResult.sameLength);
-				console.log('更长字数结果:', dictResult.moreLengths);
+				devLog('字典查询成功');
+				devLog('相同字数结果:', dictResult.sameLength);
+				devLog('更长字数结果:', dictResult.moreLengths);
 			}
 			
 			let newInfos;
@@ -1189,9 +1267,7 @@
 						return testPhrase !== userInput;
 					});
 					
-					console.log(`位置 ${idx}: candidates = ${JSON.stringify(filteredCandidates)}`);
-					
-					// 使用排名第一的短语对应位置的字作为 generated，但要避免生成用户输入
+				devLog(`位置 ${idx}: candidates = ${JSON.stringify(filteredCandidates)}`);
 					let selectedChar = firstPhrase[idx];
 					// 如果 firstPhrase 会导致与用户输入相同，使用过滤后的候选
 					const wouldMatchInput = firstPhrase.join('') === userInput;
@@ -1233,6 +1309,108 @@
 					generated: candidate || info.char, 
 					locked: false, 
 					forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
+				};
+			});
+		}
+		
+		currentInfos = newInfos;
+		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
+	};
+
+	// 更新单个字符的声调或韵母
+	const updateSingleChar = (index, newTone, newFinal) => {
+		if (!Array.isArray(currentInfos) || index < 0 || index >= currentInfos.length) return;
+		
+		// 克隆当前信息数组
+		const updatedInfos = currentInfos.map((info, idx) => {
+			if (idx === index) {
+				const updated = { ...info };
+				
+				// 更新声调
+				if (newTone !== null && newTone !== undefined) {
+					updated.forcedTone = newTone;
+					updated.tone = newTone;
+				}
+				
+				// 更新韵母
+				if (newFinal !== null && newFinal !== undefined) {
+					updated.forcedFinal = newFinal;
+					updated.fin = newFinal;
+				}
+				
+				return updated;
+			}
+			return info;
+		});
+		
+		// 使用更新后的信息重新查询
+		const looseness = Number(document.getElementById('looseness').value);
+		const dictResult = queryDict(updatedInfos, looseness);
+		currentDictResult = dictResult;
+		
+		// 获取用户输入的原词
+		const userInput = updatedInfos.map(info => info.char).join('');
+		
+		// 重新生成结果
+		let newInfos;
+		if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength) && dictResult.sameLength.length > 0) {
+			const tier = getLoosenessTier(looseness);
+			const strongMatches = dictResult.sameLength.filter((phrase) => 
+				phrase !== userInput && !phrase.includes(userInput) && phraseFitsSource(phrase, updatedInfos, looseness)
+			);
+			const ranked = strongMatches.length > 0 ? strongMatches : [];
+			
+			if (ranked.length > 0) {
+				const firstPhrase = Array.from(ranked[0]);
+				newInfos = updatedInfos.map((info, idx) => {
+					if (currentInfos[idx] && currentInfos[idx].locked) {
+						return { 
+							...info, 
+							generated: currentInfos[idx].generated || info.char, 
+							locked: true
+						};
+					}
+					return {
+						...info,
+						generated: firstPhrase[idx] || info.char,
+						locked: false
+					};
+				});
+			} else {
+				newInfos = updatedInfos.map((info, idx) => {
+					if (currentInfos[idx] && currentInfos[idx].locked) {
+						return { 
+							...info, 
+							generated: currentInfos[idx].generated || info.char, 
+							locked: true
+						};
+					}
+					const candidate = pickFromMap(info.fin, info.tone, looseness);
+					return {
+						...info,
+						generated: candidate || info.char,
+						locked: false
+					};
+				});
+			}
+		} else {
+			// 字典查询失败，使用原逻辑
+			newInfos = updatedInfos.map((info, idx) => {
+				if (info.fin === '-') {
+					return { ...info, generated: info.char, locked: false };
+				}
+				if (currentInfos[idx] && currentInfos[idx].locked) {
+					return { 
+						...info, 
+						generated: currentInfos[idx].generated || info.char, 
+						locked: true
+					};
+				}
+				const candidate = pickFromMap(info.fin, info.tone, looseness);
+				return {
+					...info,
+					generated: candidate || info.char,
+					locked: false
 				};
 			});
 		}
@@ -1315,26 +1493,39 @@
 				
 				// 第四列：韵母+声调控制
 				const td4 = document.createElement('td');
-				const finSpan = document.createElement('span');
-				finSpan.textContent = i.fin || '-';
-				td4.appendChild(finSpan);
+				
+				// 韵母输入框（可编辑）
+				const finInput = document.createElement('input');
+				finInput.type = 'text';
+				finInput.value = i.fin || '-';
+				finInput.dataset.index = index;
+				finInput.className = 'fin-input';
+				
+				// 监听韵母变化
+				finInput.addEventListener('change', (e) => {
+					const idx = Number(e.target.dataset.index);
+					const newFinal = e.target.value.trim() || '-';
+					updateSingleChar(idx, null, newFinal);
+				});
+				
+				td4.appendChild(finInput);
+				td4.appendChild(document.createTextNode(' '));
 				
 				if (i.tone !== '-') {
 					const select = document.createElement('select');
 					select.className = 'tone-select';
 					select.dataset.index = index;
-					select.style.cssText = 'padding: 4px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text);';
 					
 					const opt0 = document.createElement('option');
 					opt0.value = '';
-					opt0.textContent = `原 (${i.tone})`;
+					opt0.textContent = '原';
 					opt0.selected = i.forcedTone === null;
 					select.appendChild(opt0);
 					
 					for (let tone = 1; tone <= 4; tone++) {
 						const opt = document.createElement('option');
 						opt.value = tone;
-						opt.textContent = `${tone}声`;
+						opt.textContent = tone;
 						opt.selected = i.forcedTone == tone;
 						select.appendChild(opt);
 					}
@@ -1342,7 +1533,7 @@
 					select.addEventListener('change', (e) => {
 						const idx = Number(e.target.dataset.index);
 						const val = e.target.value ? Number(e.target.value) : null;
-						updateSingleChar(idx, val);
+						updateSingleChar(idx, val, null);
 					});
 					
 					td4.appendChild(select);
@@ -1612,7 +1803,10 @@
 
 		const init = () => {
 			document.getElementById('go').addEventListener('click', process);
-			document.getElementById('source').addEventListener('keydown', (e) => {
+			const sourceInput = document.getElementById('source');
+			
+			// 键盘快捷键
+			sourceInput.addEventListener('keydown', (e) => {
 				if (e.ctrlKey && e.key === 'Enter') process();
 			});
 
