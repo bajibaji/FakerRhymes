@@ -431,6 +431,84 @@
 		.blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: var(--accent); opacity: 0.15; }
 		.blob-2 { bottom: -10%; right: -10%; width: 40vw; height: 40vw; background: var(--accent-2); opacity: 0.15; }
 		.blob-3 { top: 40%; left: 40%; width: 30vw; height: 30vw; background: #3b82f6; opacity: 0.1; }
+
+		/* Modal Styles */
+		.modal-overlay {
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.7);
+			backdrop-filter: blur(4px);
+			display: none;
+			align-items: center;
+			justify-content: center;
+			z-index: 1000;
+			opacity: 0;
+			transition: opacity 0.3s ease;
+		}
+
+		.modal-overlay.active {
+			display: flex;
+			opacity: 1;
+		}
+
+		.modal-content {
+			background: var(--panel);
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			width: min(500px, 90%);
+			padding: 24px;
+			box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+			transform: translateY(20px);
+			transition: transform 0.3s ease;
+		}
+
+		.modal-overlay.active .modal-content {
+			transform: translateY(0);
+		}
+
+		.modal-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 20px;
+		}
+
+		.modal-header h2 {
+			margin: 0;
+			font-size: 20px;
+			color: var(--accent-2);
+		}
+
+		.close-modal {
+			background: transparent;
+			border: none;
+			color: var(--muted);
+			font-size: 24px;
+			cursor: pointer;
+			padding: 0;
+			line-height: 1;
+		}
+
+		.close-modal:hover {
+			color: var(--text);
+		}
+
+		.settings-group {
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+		}
+
+		.settings-item {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.settings-item label {
+			font-size: 14px;
+			margin-bottom: 0;
+		}
 	</style>
 </head>
 <body>
@@ -440,7 +518,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.5.5</h1>
+			<h1>连押同调韵脚生成器 v1.6.0</h1>
 			<p class="credit">©TRUEPEAK 2025 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -461,7 +539,18 @@
 					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
 					<input type="range" id="looseness" min="0" max="1" step="0.5" value="0.0" />
 				</div>
-				<div style="color:brown; font-size: small; font-weight: bold; text-align: center;" >*使用前请先加载词库*</div>
+
+				<div class="controls" style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+					<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+						<div style="display: flex; align-items: center; gap: 8px;">
+							<input type="checkbox" id="aiMode" style="width: 18px; height: 18px; cursor: pointer;" />
+							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode">🤖 AI 押韵模式 (Gemini-3-flash-preview)</label>
+						</div>
+						<button class="btn ghost small" id="openAiSettings" title="AI 设置">⚙️</button>
+					</div>
+				</div>
+
+				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*使用前请先加载词库*</div>
 				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
 				<div class="hint">- 越宽松需要查询的时间越长，请耐心等待</div>
@@ -503,6 +592,31 @@
 		</section>
 
 		<div class="footer">词库基于雾凇拼音词库以及中华新华字典数据库以及清华大学开放中文词库，查询算法基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
+	</div>
+
+	<!-- AI Settings Modal -->
+	<div class="modal-overlay" id="aiSettingsModal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h2>🤖 AI 押韵设置</h2>
+				<button class="close-modal" id="closeAiSettings">&times;</button>
+			</div>
+			<div class="settings-group">
+				<div class="settings-item">
+					<label for="geminiApiKey">Gemini API Key</label>
+					<input type="text" id="geminiApiKey" placeholder="输入 Gemini API Key" style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
+					<div class="hint">没有 Key？<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-2);">点击获取</a></div>
+				</div>
+				<div class="settings-item">
+					<label for="geminiProxy">API 代理地址 (可选)</label>
+					<input type="text" id="geminiProxy" placeholder="例如: https://proxy.com" style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
+					<div class="hint">解决 Failed to fetch 错误。</div>
+				</div>
+				<div style="margin-top: 10px;">
+					<button class="btn" style="width: 100%;" id="saveAiSettings">保存设置</button>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<script src="./data.js"></script>
@@ -579,8 +693,8 @@
 		});
 		
 		// Animate output when generated
-		const goBtn = document.getElementById('go');
-		goBtn.addEventListener('click', () => {
+		window.triggerResultAnimation = () => {
+			if (typeof gsap === 'undefined') return;
 			gsap.fromTo("#output", { opacity: 0.5, y: 5 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" });
 			gsap.fromTo("#badges", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.4, delay: 0.1, ease: "power2.out" });
 			// Table rows animation
@@ -594,6 +708,11 @@
 					clearProps: "all"
 				});
 			}, 50);
+		};
+
+		const goBtn = document.getElementById('go');
+		goBtn.addEventListener('click', () => {
+			window.triggerResultAnimation();
 		});
 	});
 </script>
@@ -1073,9 +1192,118 @@
 			return candidates[Math.floor(Math.random() * candidates.length)];
 		};
 
+		const processAI = async (src, infos, looseness) => {
+			const apiKey = localStorage.getItem('GEMINI_API_KEY');
+			const proxy = localStorage.getItem('GEMINI_PROXY') || '';
+			if (!apiKey) {
+				alert('请先输入 Gemini API Key');
+				return;
+			}
+
+			const output = document.getElementById('output');
+			const badges = document.getElementById('badges');
+			const matchedResultsList = document.getElementById('matchedResultsList');
+			
+			output.textContent = '🤖 AI 正在思考中...';
+			badges.innerHTML = '<div class="badge">⏳ 请稍候</div>';
+			matchedResultsList.innerHTML = '';
+
+			const tier = getLoosenessTier(looseness);
+			const rhymeInfo = infos.map(i => `${i.char}(${i.fin}${i.tone})`).join(' ');
+			
+			const prompt = `你是一个中文押韵专家。
+输入词语：${src}
+韵脚信息：${rhymeInfo}
+宽松度级别：${tier} (0=严格, 1=中等, 2=宽松)
+
+任务：
+1. 生成至少 30 个与输入词语押韵的中文词语。
+2. 生成的词语不能和输入词语相同。生成的词语要包含不限于常用词语、网络词语、成语、歌词等，但优先显示歌词和常见词语。
+3. 生成字数相同的词语30个,但也要生成20个包含字数更多尾部押韵的词语。生成更多字数的押韵词语要尽量多样化，尾部不可以重复。
+4. 必须严格遵守韵脚和声调要求（除非宽松度较高）。
+5. 只返回词语列表，用空格分隔，不要有任何解释。`;
+
+			try {
+				let baseUrl = 'https://generativelanguage.googleapis.com';
+				if (proxy) {
+					baseUrl = proxy.replace(/\/$/, '');
+				}
+
+				const response = await fetch(`${baseUrl}/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						contents: [{ parts: [{ text: prompt }] }]
+					})
+				});
+
+				if (!response.ok) {
+					const errorData = await response.json().catch(() => ({}));
+					throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+				}
+
+				const data = await response.json();
+				const text = data.candidates[0].content.parts[0].text.trim();
+				// 使用正则提取所有中文字符串，过滤掉非中文和原词
+				const aiWords = (text.match(/[\u4e00-\u9fa5]+/g) || []).filter(w => w && w !== src);
+
+				if (aiWords.length === 0) {
+					throw new Error('AI 未返回有效的押韵词，请重试。');
+				}
+
+				// 将 AI 结果分类，模拟 dictResult 结构
+				const sourceLength = Array.from(src).length;
+				const dictResult = {
+					sameLength: aiWords.filter(w => Array.from(w).length === sourceLength),
+					lessLength: aiWords.filter(w => Array.from(w).length < sourceLength),
+					moreLengths: aiWords.filter(w => Array.from(w).length > sourceLength)
+				};
+
+				// 构造 infos 结构，用于渲染表格
+				const firstAiWord = dictResult.sameLength[0] || aiWords[0] || src;
+				const aiChars = Array.from(firstAiWord);
+				const newInfos = infos.map((info, idx) => {
+					const char = aiChars[idx] || info.char;
+					return {
+						...info,
+						generated: char,
+						candidates: aiWords.filter(w => Array.from(w).length === sourceLength).map(w => Array.from(w)[idx]).filter(Boolean),
+						locked: false
+					};
+				});
+
+				currentInfos = newInfos;
+				currentDictResult = dictResult;
+				render(newInfos, firstAiWord, dictResult, src, true);
+
+				// 填充更多匹配结果列表
+				const seen = new Set();
+				[...dictResult.lessLength, ...dictResult.moreLengths].forEach(phrase => {
+					if (seen.has(phrase)) return;
+					seen.add(phrase);
+					const span = document.createElement('span');
+					span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
+					span.textContent = phrase;
+					matchedResultsList.appendChild(span);
+				});
+				document.getElementById('matchedResults').style.display = 'block';
+
+			} catch (e) {
+				console.error('AI 生成失败:', e);
+				let errorMsg = e.message;
+				if (errorMsg === 'Failed to fetch') {
+					errorMsg = '网络连接失败 (Failed to fetch)。如果你在特殊网络环境下，请尝试在设置中配置 API 代理地址。';
+				}
+				output.textContent = '❌ AI 生成失败: ' + errorMsg;
+				badges.innerHTML = '';
+			}
+		};
+
 		const process = () => {
 			const src = document.getElementById('source').value.trim();
 			const looseness = Number(document.getElementById('looseness').value);
+			const isAiMode = document.getElementById('aiMode').checked;
+
 			if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
 				render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null, '');
 				return;
@@ -1103,6 +1331,11 @@
 				const tone = forcedTone !== null ? forcedTone : info.baseTone;
 				return { ...info, tone, forcedTone };
 			});
+
+			if (isAiMode) {
+				processAI(src, tempInfosWithOverrides, looseness);
+				return;
+			}
 			
 			// 尝试从字典查询整句
 			const dictResult = queryDict(tempInfosWithOverrides, looseness);
@@ -1321,6 +1554,8 @@
 	const updateSingleChar = (index, newTone, newFinal) => {
 		if (!Array.isArray(currentInfos) || index < 0 || index >= currentInfos.length) return;
 		
+		const isAiMode = document.getElementById('aiMode').checked;
+
 		// 克隆当前信息数组
 		const updatedInfos = currentInfos.map((info, idx) => {
 			if (idx === index) {
@@ -1342,6 +1577,12 @@
 			}
 			return info;
 		});
+
+		if (isAiMode) {
+			const src = document.getElementById('source').value.trim();
+			processAI(src, updatedInfos, Number(document.getElementById('looseness').value));
+			return;
+		}
 		
 		// 使用更新后的信息重新查询
 		const looseness = Number(document.getElementById('looseness').value);
@@ -1419,7 +1660,7 @@
 		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
 	};
 
-	const render = (infos, text, dictResult, userInput) => {
+	const render = (infos, text, dictResult, userInput, skipFilter = false) => {
 			// 更新右侧生成结果面板
 			const output = document.getElementById('output');
 			const badges = document.getElementById('badges');
@@ -1440,7 +1681,7 @@
 						// 排除用户输入和已经在结果中的词
 						if (phrase !== text && phrase !== userInput && !results.includes(phrase)) {
 							// 严格检查该词是否真正符合源词的韵脚要求
-							if (phraseFitsSource(phrase, infos, looseness)) {
+							if (skipFilter || phraseFitsSource(phrase, infos, looseness)) {
 								results.push(phrase);
 							}
 						}
@@ -1542,6 +1783,9 @@
 				
 				body.appendChild(tr);
 			});
+
+			// 触发动画
+			if (window.triggerResultAnimation) window.triggerResultAnimation();
 		};
 
 		const loadOnlineDict = async () => {
@@ -1821,6 +2065,59 @@
 
 			const loadDictBtn = document.getElementById('loadDictBtn');
 			loadDictBtn.addEventListener('click', loadOnlineDict);
+
+			// AI Mode Logic
+			const aiModeCheckbox = document.getElementById('aiMode');
+			const dictWarning = document.getElementById('dictWarning');
+			const aiSettingsModal = document.getElementById('aiSettingsModal');
+			const openAiSettingsBtn = document.getElementById('openAiSettings');
+			const closeAiSettingsBtn = document.getElementById('closeAiSettings');
+			const saveAiSettingsBtn = document.getElementById('saveAiSettings');
+			const geminiApiKeyInput = document.getElementById('geminiApiKey');
+			const geminiProxyInput = document.getElementById('geminiProxy');
+
+			// Load saved AI settings
+			const savedAiMode = localStorage.getItem('AI_MODE') === 'true';
+			const savedApiKey = localStorage.getItem('GEMINI_API_KEY') || '';
+			const savedProxy = localStorage.getItem('GEMINI_PROXY') || '';
+			
+			aiModeCheckbox.checked = savedAiMode;
+			geminiApiKeyInput.value = savedApiKey;
+			geminiProxyInput.value = savedProxy;
+			if (savedAiMode) {
+				dictWarning.style.display = 'none';
+				loadDictBtn.style.display = 'none';
+			}
+
+			aiModeCheckbox.addEventListener('change', (e) => {
+				const isAi = e.target.checked;
+				dictWarning.style.display = isAi ? 'none' : 'block';
+				loadDictBtn.style.display = isAi ? 'none' : 'inline-flex';
+				localStorage.setItem('AI_MODE', isAi);
+				if (isAi && !localStorage.getItem('GEMINI_API_KEY')) {
+					aiSettingsModal.classList.add('active');
+				}
+			});
+
+			// Modal Logic
+			openAiSettingsBtn.addEventListener('click', () => {
+				aiSettingsModal.classList.add('active');
+			});
+
+			const closeModal = () => {
+				aiSettingsModal.classList.remove('active');
+			};
+
+			closeAiSettingsBtn.addEventListener('click', closeModal);
+			aiSettingsModal.addEventListener('click', (e) => {
+				if (e.target === aiSettingsModal) closeModal();
+			});
+
+			saveAiSettingsBtn.addEventListener('click', () => {
+				localStorage.setItem('GEMINI_API_KEY', geminiApiKeyInput.value.trim());
+				localStorage.setItem('GEMINI_PROXY', geminiProxyInput.value.trim());
+				closeModal();
+			});
 
 			// Check if online dict is already loaded
 			const updateDictStatus = () => {
