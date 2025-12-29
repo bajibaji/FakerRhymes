@@ -518,8 +518,8 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.6.1</h1>
-			<p class="credit">©TRUEPEAK 2025 - DEVELOPED BY DANJUAN </p>
+			<h1>连押同调韵脚生成器 v1.6.2</h1>
+			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
 
@@ -538,6 +538,25 @@
 					</div>
 					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
 					<input type="range" id="looseness" min="0" max="1" step="0.5" value="0.0" />
+					
+					<!-- 平仄过滤选择器（仅在最松时显示） -->
+					<div id="pingzeFilterContainer" style="display: none; margin-top: 10px; padding: 10px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border: 1px solid var(--border);">
+						<label class="small" style="margin-bottom: 8px; display: block;">平仄过滤（尾字声调）</label>
+						<div style="display: flex; gap: 8px; flex-wrap: wrap;">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
+								<input type="radio" name="pingze" value="all" checked style="cursor: pointer;" />
+								<span>全部</span>
+							</label>
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
+								<input type="radio" name="pingze" value="ping" style="cursor: pointer;" />
+								<span>平</span>
+							</label>
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
+								<input type="radio" name="pingze" value="ze" style="cursor: pointer;" />
+								<span>仄</span>
+							</label>
+						</div>
+					</div>
 				</div>
 
 				<div class="controls" style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
@@ -751,6 +770,40 @@
 		let currentDictResult = null; // 存储字典查询结果
 		let dict = null; // 优化字典
 		let locks = [];
+
+		// 平仄过滤函数：根据尾字声调过滤词语列表
+		// pingze: 'all' | 'ping' | 'ze'
+		// 平声 = 1, 2声调；仄声 = 3, 4声调
+		const filterByPingZe = (phrases, pingze) => {
+			if (!pingze || pingze === 'all' || !Array.isArray(phrases)) {
+				return phrases;
+			}
+			
+			return phrases.filter(phrase => {
+				if (!phrase || phrase.length === 0) return false;
+				
+				// 获取尾字
+				const chars = Array.from(phrase);
+				const lastChar = chars[chars.length - 1];
+				const lastInfo = toInfo(lastChar);
+				
+				if (!lastInfo || !lastInfo.tone || lastInfo.tone === '-') {
+					return false; // 无法确定声调的词语排除
+				}
+				
+				const tone = Number(lastInfo.tone);
+				
+				if (pingze === 'ping') {
+					// 平声：1、2声
+					return tone === 1 || tone === 2;
+				} else if (pingze === 'ze') {
+					// 仄声：3、4声
+					return tone === 3 || tone === 4;
+				}
+				
+				return true;
+			});
+		};
 
 		// 加载优化字典
 		const loadDict = async () => {
@@ -1213,17 +1266,17 @@
 			
 			const prompt = `你是一个深谙中文韵律的顶级作词人，现在需要根据一个词寻找押韵的词汇。
 
-【输入词】：${src}
-【韵部】：${rhymeInfo}
-【等级】：Tier ${tier}（0为死押、音调和韵脚要一致，1为通押、优先音调一致，2为谐音、音调可以不一致）
+					【输入词】：${src}
+					【韵部】：${rhymeInfo}
+					【等级】：Tier ${tier}（0为死押、音调和韵脚要一致，1为通押、优先音调一致，2为谐音、音调可以不一致）
 
-任务：
-1. 生成至少 30 个与输入词语押韵的中文词语。
-2. 生成的词语不能和输入词语相同。生成的词语要包含不限于常用词语、网络词语、成语、歌词等，但优先显示生成的歌词和常见词语。
-3. 生成字数相同的词语30个,但也要生成20个包含字数更多尾部押韵的词语。生成更多字数的押韵词语要尽量多样化，尾部不可以重复。
-4. 必须严格遵守韵脚和声调要求（除非宽松度较高）。
-5. 只返回词语列表，用空格分隔，不要有任何解释。
-6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
+						任务：
+						1. 生成至少 25 个与输入词语押韵的中文词语。
+						2. 生成的词语不能和输入词语相同。生成的词语要包含不限于常用词语、网络词语、成语、歌词等，但优先显示生成的歌词和常见词语。
+						3. 生成字数相同的词语25个,但也要生成15个包含字数更多尾部押韵的词语。生成更多字数的押韵词语要尽量多样化，尾部不可以重复。
+						4. 必须严格遵守韵脚和音调要求（除非等级Tier较高，音调为1,2,3,4）。
+						5. 只返回词语列表，用空格分隔，不要有任何解释。
+						6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
 
 			try {
 				let baseUrl = 'https://generativelanguage.googleapis.com';
@@ -1305,6 +1358,7 @@
 			const src = document.getElementById('source').value.trim();
 			const looseness = Number(document.getElementById('looseness').value);
 			const isAiMode = document.getElementById('aiMode').checked;
+			const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
 
 			if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
 				render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null, '');
@@ -1371,15 +1425,26 @@
 			if (dictResult) {
 				// 少一字匹配
 				if (dictResult.lessLength && dictResult.lessLength.length > 0) {
-					const filteredLess = dictResult.lessLength.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
-					const displayLess = filteredLess.length > 0 ? filteredLess : dictResult.lessLength;
+					let filteredLess = dictResult.lessLength.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
+					let displayLess = filteredLess.length > 0 ? filteredLess : dictResult.lessLength;
+					
+					// 应用平仄过滤（仅在最松时有效）
+					if (looseness >= 1.0 && pingzeFilter !== 'all') {
+						displayLess = filterByPingZe(displayLess, pingzeFilter);
+					}
+					
 					displayLess.forEach(appendPhrase);
 				}
 
 				// 更多字匹配：两字词全部展示，超过2字的按尾部两字分组随机展示一个
 				if (dictResult.moreLengths && dictResult.moreLengths.length > 0) {
-					const filteredMore = dictResult.moreLengths.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
-					const displayMore = filteredMore.length > 0 ? filteredMore : dictResult.moreLengths;
+					let filteredMore = dictResult.moreLengths.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
+					let displayMore = filteredMore.length > 0 ? filteredMore : dictResult.moreLengths;
+					
+					// 应用平仄过滤（仅在最松时有效）
+					if (looseness >= 1.0 && pingzeFilter !== 'all') {
+						displayMore = filterByPingZe(displayMore, pingzeFilter);
+					}
 					
 					// 按字数分组
 					const groupedByLength = {};
@@ -1663,13 +1728,17 @@
 	};
 
 	const render = (infos, text, dictResult, userInput, skipFilter = false) => {
+			// 获取平仄过滤选项
+			const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
+			const looseness = Number(document.getElementById('looseness').value);
+			
 			// 更新右侧生成结果面板
 			const output = document.getElementById('output');
 			const badges = document.getElementById('badges');
 			
 			if (output) {
 				// 显示相同字数的所有匹配结果（来自dictResult）
-				const results = [];
+				let results = [];
 				
 				// 先显示当前生成结果（排除与用户输入相同的词）
 				if (text && text !== userInput) {
@@ -1678,7 +1747,6 @@
 				
 				// 然后添加字典中的相同字数结果（必须通过phraseFitsSource过滤）
 				if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength)) {
-					const looseness = Number(document.getElementById('looseness').value);
 					for (const phrase of dictResult.sameLength) {
 						// 排除用户输入和已经在结果中的词
 						if (phrase !== text && phrase !== userInput && !results.includes(phrase)) {
@@ -1688,6 +1756,11 @@
 							}
 						}
 					}
+				}
+				
+				// 应用平仄过滤（仅在最松时有效）
+				if (looseness >= 1.0 && pingzeFilter !== 'all') {
+					results = filterByPingZe(results, pingzeFilter);
 				}
 				
 				// 用制表符分隔显示所有结果在同一行
@@ -2057,13 +2130,44 @@
 			});
 
 			const loosenInput = document.getElementById('looseness');
+			const pingzeFilterContainer = document.getElementById('pingzeFilterContainer');
+			
+			// 监听韵脚宽松度变化，显示/隐藏平仄过滤器
+			const updatePingzeFilterVisibility = () => {
+				const looseness = Number(loosenInput.value);
+				if (looseness >= 1.0) {
+					pingzeFilterContainer.style.display = 'block';
+				} else {
+					pingzeFilterContainer.style.display = 'none';
+				}
+			};
+			
 			const triggerRecalc = () => {
 				if (document.getElementById('source').value.trim()) process();
 			};
 			// 使用 debounce，延迟 300ms 后再执行查询
 			const debouncedRecalc = debounce(triggerRecalc, 100);
-			loosenInput.addEventListener('input', debouncedRecalc);
-			loosenInput.addEventListener('change', triggerRecalc);
+			loosenInput.addEventListener('input', () => {
+				updatePingzeFilterVisibility();
+				debouncedRecalc();
+			});
+			loosenInput.addEventListener('change', () => {
+				updatePingzeFilterVisibility();
+				triggerRecalc();
+			});
+			
+			// 初始化平仄过滤器可见性
+			updatePingzeFilterVisibility();
+			
+			// 监听平仄过滤选项变化
+			const pingzeRadios = document.querySelectorAll('input[name="pingze"]');
+			pingzeRadios.forEach(radio => {
+				radio.addEventListener('change', () => {
+					if (document.getElementById('source').value.trim()) {
+						process();
+					}
+				});
+			});
 
 			const loadDictBtn = document.getElementById('loadDictBtn');
 			loadDictBtn.addEventListener('click', loadOnlineDict);
