@@ -509,6 +509,118 @@
 			font-size: 14px;
 			margin-bottom: 0;
 		}
+		/* Help Button & Modal */
+		.help-btn {
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			width: 30px;
+			height: 30px;
+			background: var(--panel);
+			border: 1px solid var(--border);
+			border-radius: 50%;
+			color: var(--text);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 18px;
+			cursor: pointer;
+			z-index: 1000;
+			transition: all 0.2s ease;
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		}
+
+		.help-btn:hover {
+			background: var(--accent);
+			border-color: var(--accent);
+			transform: scale(1.1);
+		}
+
+		.modal-overlay {
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.6);
+			backdrop-filter: blur(4px);
+			z-index: 2000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.3s ease;
+		}
+
+		.modal-overlay.active {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.modal {
+			background: var(--panel);
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			width: min(500px, 90vw);
+			max-height: 80vh;
+			overflow-y: auto;
+			padding: 24px;
+			box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+			transform: translateY(20px);
+			transition: transform 0.3s ease;
+		}
+
+		.modal-overlay.active .modal {
+			transform: translateY(0);
+		}
+
+		.modal-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 20px;
+			padding-bottom: 16px;
+			border-bottom: 1px solid var(--border);
+		}
+
+		.modal-header h2 {
+			margin: 0;
+			font-size: 20px;
+		}
+
+		.modal-close {
+			background: transparent;
+			border: none;
+			color: var(--muted);
+			font-size: 24px;
+			cursor: pointer;
+			padding: 4px;
+			line-height: 1;
+			border-radius: 4px;
+		}
+
+		.modal-close:hover {
+			color: var(--text);
+			background: rgba(255, 255, 255, 0.1);
+		}
+
+		.modal-content {
+			line-height: 1.6;
+			color: var(--text);
+		}
+		
+		.modal-content h3 {
+			margin: 16px 0 8px;
+			font-size: 16px;
+			color: var(--accent-2);
+		}
+
+		.modal-content ul {
+			padding-left: 20px;
+			margin: 8px 0;
+		}
+		
+		.modal-content li {
+			margin-bottom: 6px;
+		}
 	</style>
 </head>
 <body>
@@ -518,7 +630,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>连押同调韵脚生成器 v1.6.2</h1>
+			<h1>牛逼韵脚生成器 v1.6.3</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -2329,6 +2441,66 @@
 		};
 
 		init();
+	</script>
+	<!-- Help Button -->
+	<button class="help-btn" id="helpTriggerBtn" title="使用说明">?</button>
+
+	<!-- Modal -->
+	<div class="modal-overlay" id="helpModalOverlay">
+		<div class="modal">
+			<div class="modal-header">
+				<h2>使用说明</h2>
+				<button class="modal-close" id="helpCloseBtn">&times;</button>
+			</div>
+			<div class="modal-content">
+				<h3>基本功能</h3>
+				<ul>
+					<li>使用前请务必点击加载词库</li>
+					<li>在左侧输入框输入单词。</li>
+					<li>点击“生成押韵”按钮，系统会自动分析并生成押韵词汇。</li>
+					<li>调节韵脚宽松度可以放宽押韵条件，最宽松时可以选择显示平仄</li>
+				</ul>
+				<h3>高级设置</h3>
+				<ul>
+					<li><strong>AI押韵模式：</strong>需要自行填入自己的APIKEY</li>
+					<li><strong>目前AI暂时只支持Gemini</li>
+				</ul>
+				<h3>关于</h3>
+				<p>这是一个简单的中文押韵生成器，旨在帮助和创作者寻找灵感。</p>
+				<p>爷不肉，蛋卷制造 ©2026</p>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		const helpTriggerBtn = document.getElementById('helpTriggerBtn');
+		const helpModalOverlay = document.getElementById('helpModalOverlay');
+		const helpCloseBtn = document.getElementById('helpCloseBtn');
+
+		function toggleHelpModal(show) {
+			if (show) {
+				helpModalOverlay.classList.add('active');
+			} else {
+				helpModalOverlay.classList.remove('active');
+			}
+		}
+
+		helpTriggerBtn.addEventListener('click', () => toggleHelpModal(true));
+		helpCloseBtn.addEventListener('click', () => toggleHelpModal(false));
+		
+		// Click outside to close
+		helpModalOverlay.addEventListener('click', (e) => {
+			if (e.target === helpModalOverlay) {
+				toggleHelpModal(false);
+			}
+		});
+		
+		// Escape key to close
+		document.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape' && helpModalOverlay.classList.contains('active')) {
+				toggleHelpModal(false);
+			}
+		});
 	</script>
 </body>
 </html>
