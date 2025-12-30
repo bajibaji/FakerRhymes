@@ -5,9 +5,10 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>中文押韵生成器</title>
 	<link rel="preconnect" href="https://unpkg.com" />
+	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<style>
 		:root {
-			--bg: #0f172a;
+			--bg: #1b0d22;
 			--panel: #111827;
 			--card: #0b1220;
 			--text: #e2e8f0;
@@ -266,11 +267,7 @@
 			color: var(--text);
 			border: 1px solid var(--border);
 			box-shadow: none;
-		}
-
-		.btn.ghost:hover {
-			border-color: var(--accent);
-			box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+		text-decoration: none;
 		}
 
 		.btn.small {
@@ -431,6 +428,35 @@
 		.blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: var(--accent); opacity: 0.15; }
 		.blob-2 { bottom: -10%; right: -10%; width: 40vw; height: 40vw; background: var(--accent-2); opacity: 0.15; }
 		.blob-3 { top: 40%; left: 40%; width: 30vw; height: 30vw; background: #3b82f6; opacity: 0.1; }
+
+		/* Loading Spinner */
+		.btn.loading {
+			pointer-events: none;
+			position: relative;
+		}
+		
+		.btn.loading .btn-text {
+			opacity: 0.5;
+		}
+		
+		.btn.loading::after {
+			content: '';
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			width: 16px;
+			height: 16px;
+			margin: -8px 0 0 -8px;
+			border: 2px solid rgba(255, 255, 255, 0.3);
+			border-top-color: white;
+			border-radius: 50%;
+			animation: spin 0.6s linear infinite;
+		}
+		
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
 
 		/* Modal Styles */
 		.modal-overlay {
@@ -668,7 +694,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>牛逼韵脚生成器 v1.6.3</h1>
+			<h1>废壳韵脚生成器 v1.6.6</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -677,7 +703,7 @@
 			<section class="panel">
 				<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; margin-bottom: 10px;">
 					<label for="source">请输入要押韵的词语：</label>
-					<a class="btn ghost small" href="custom.html">自定义词库</a>
+					<a class="btn ghost small" href="custom.html"><i class="ri-file-list-3-line"></i>自定义词库</a>
 				</div>
 				<textarea id="source" placeholder="示例：废壳"></textarea>
 
@@ -713,9 +739,9 @@
 					<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
 						<div style="display: flex; align-items: center; gap: 8px;">
 							<input type="checkbox" id="aiMode" style="width: 18px; height: 18px; cursor: pointer;" />
-							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode">🤖 AI 押韵模式 (Gemini-3-flash-preview)</label>
+							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode"><i class="ri-robot-2-line"></i> AI 押韵模式 </label>
 						</div>
-						<button class="btn ghost small" id="openAiSettings" title="AI 设置">⚙️</button>
+						<button class="btn ghost small" id="openAiSettings" title="AI 设置"><i class="ri-settings-3-line"></i></button>
 					</div>
 				</div>
 
@@ -767,7 +793,7 @@
 	<div class="modal-overlay" id="aiSettingsModal">
 		<div class="modal-content">
 			<div class="modal-header">
-				<h2>🤖 AI 押韵设置</h2>
+				<h2><i class="ri-robot-2-line"></i> AI 押韵设置</h2>
 				<button class="close-modal" id="closeAiSettings">&times;</button>
 			</div>
 			<div class="settings-group">
@@ -1000,6 +1026,11 @@
 			// 特殊处理：j/q/x/y 后的 u 实际是 ü (v)
 			if (['j', 'q', 'x', 'y'].includes(initial) && rest.startsWith('u')) {
 				rest = 'v' + rest.slice(1);
+			}
+			
+			// 特殊处理：j/q/x/y 后的 e 实际是 ie（比如 ye -> ie, jie -> ie）
+			if (['j', 'q', 'x', 'y'].includes(initial) && rest === 'e') {
+				rest = 'ie';
 			}
 
 			// --- 新增：i韵隔离协议 (Triple-I Isolation) ---
@@ -1407,8 +1438,8 @@
 			const badges = document.getElementById('badges');
 			const matchedResultsList = document.getElementById('matchedResultsList');
 			
-			output.textContent = '🤖 AI 正在思考中...';
-			badges.innerHTML = '<div class="badge">⏳ 请稍候</div>';
+			output.innerHTML = '<i class="ri-robot-2-line"></i> AI 正在思考中...';
+			badges.innerHTML = '<div class="badge"><i class="ri-time-line"></i> 请稍候</div>';
 			matchedResultsList.innerHTML = '';
 
 			const tier = getLoosenessTier(looseness);
@@ -1501,26 +1532,41 @@
 				}
 				output.textContent = '❌ AI 生成失败: ' + errorMsg;
 				badges.innerHTML = '';
+			} finally {
+				// Remove loading state
+				const goBtn = document.getElementById('go');
+				setTimeout(() => {
+					goBtn.classList.remove('loading');
+				}, 100);
 			}
 		};
 
 		const process = () => {
-			const src = document.getElementById('source').value.trim();
-			const looseness = Number(document.getElementById('looseness').value);
-			const isAiMode = document.getElementById('aiMode').checked;
-			const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
+		const goBtn = document.getElementById('go');
+		const src = document.getElementById('source').value.trim();
+		const looseness = Number(document.getElementById('looseness').value);
+		const isAiMode = document.getElementById('aiMode').checked;
+		const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
+		
+		// Show loading state
+		goBtn.classList.add('loading');
+		if (!goBtn.querySelector('.btn-text')) {
+			goBtn.innerHTML = '<span class="btn-text">' + goBtn.textContent + '</span>';
+		}
+		
+		if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
+			goBtn.classList.remove('loading');
+			render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null, '');
+			return;
+		}
+		if (bankMap.size === 0) bankMap = registerBank();
+		if (!src) {
+			goBtn.classList.remove('loading');
+			render([], '等待输入...', null, '');
+			return;
+		}
 
-			if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
-				render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null, '');
-				return;
-			}
-			if (bankMap.size === 0) bankMap = registerBank();
-			if (!src) {
-				render([], '等待输入...', null, '');
-				return;
-			}
-
-			// Build new infos but preserve locked/forced settings from previous run
+		// Build new infos but preserve locked/forced settings from previous run
 			const oldInfos = Array.isArray(currentInfos) ? currentInfos.slice() : [];
 			
 			// 先提取所有字符的拼音信息，记录基准声调
@@ -1765,6 +1811,11 @@
 		
 		currentInfos = newInfos;
 		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
+		
+		// Remove loading state
+		setTimeout(() => {
+			goBtn.classList.remove('loading');
+		}, 100);
 	};
 
 	// 更新单个字符的声调或韵母
@@ -1931,7 +1982,7 @@
 				if (text) {
 					const badge = document.createElement('div');
 					badge.className = 'badge';
-					badge.innerHTML = `✨ ${text.length} 字`;
+					badge.innerHTML = `<i class="ri-sparkling-line"></i> ${text.length} 字`;
 					badges.appendChild(badge);
 				}
 			}
@@ -2016,7 +2067,7 @@
 		const loadOnlineDict = async () => {
 			const btn = document.getElementById('loadDictBtn');
 			const originalText = btn.textContent;
-			btn.textContent = '⏳ 加载中...';
+			btn.innerHTML = '<i class="ri-loader-4-line"></i> 加载中...';
 			btn.disabled = true;
 
 			// Check if Web Worker is supported
@@ -2111,8 +2162,7 @@
 								dictStatusText.textContent = statusText;
 
 								setTimeout(() => {
-									btn.innerHTML = `📚 已缓存 ${chars.length} 字`;
-									btn.disabled = false;
+						btn.innerHTML = `<i class="ri-book-2-line"></i> 已缓存 ${chars.length} 字`;
 									btn.style.background = '';
 									progressBar.style.display = 'none';
 								}, 1500);
@@ -2169,7 +2219,7 @@
 
 				if (!response.ok) throw new Error('HTTP ' + response.status);
 
-				btn.textContent = '⏳ 解析中...';
+				btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
 				const data = await response.json();
 				const chars = new Set();
 				let stats = {
@@ -2183,7 +2233,7 @@
 					stats.categories = 1;
 					data.forEach((item, idx) => {
 						if (idx % 5000 === 0) {
-							btn.textContent = `⏳ 解析中... ${Math.round((idx / data.length) * 100)}%`;
+							btn.innerHTML = `<i class="ri-loader-4-line"></i> 解析中... ${Math.round((idx / data.length) * 100)}%`;
 						}
 						if (typeof item === 'string') {
 							stats.totalStrings++;
@@ -2200,7 +2250,7 @@
 					stats.categories = entries.length;
 					entries.forEach(([, value], idx) => {
 						if (idx % 500 === 0) {
-							btn.textContent = `⏳ 解析中... ${Math.round((idx / entries.length) * 100)}%`;
+							btn.innerHTML = `<i class="ri-loader-4-line"></i> 解析中... ${Math.round((idx / entries.length) * 100)}%`;
 						}
 						if (Array.isArray(value)) {
 							stats.totalStrings += value.length;
@@ -2236,7 +2286,7 @@
 				const dictStatusText = document.getElementById('dictStatusText');
 				dictStatus.style.display = 'block';
 				
-				let statusText = `📖 词库：${charArray.length} 个唯一汉字（本地优化词库）`;
+				let statusText = `<i class="ri-book-open-line"></i> 词库：${charArray.length} 个唯一汉字（本地优化词库）`;
 				if (stats.totalChars > 0) {
 					statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
 				}
@@ -2244,7 +2294,7 @@
 				dictStatusText.textContent = statusText;
 
 				setTimeout(() => {
-					btn.innerHTML = `📚 已缓存 ${charArray.length} 字`;
+					btn.innerHTML = `✅️ 已缓存 ${charArray.length} 字`;
 					btn.disabled = false;
 					btn.style.background = '';
 				}, 1500);
@@ -2273,6 +2323,12 @@
 		const init = () => {
 			document.getElementById('go').addEventListener('click', process);
 			const sourceInput = document.getElementById('source');
+			
+			// 当输入框内容变化时，清除加载状态
+			sourceInput.addEventListener('input', () => {
+				const goBtn = document.getElementById('go');
+				goBtn.classList.remove('loading');
+			});
 			
 			// 键盘快捷键
 			sourceInput.addEventListener('keydown', (e) => {
@@ -2388,7 +2444,7 @@
 							const chars = JSON.parse(cached);
 							const date = new Date(Number(cachedTime));
 							const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '在线词库';
-							loadDictBtn.innerHTML = `📚 已缓存 ${chars.length} 字`;
+							loadDictBtn.innerHTML = `✅️ 已缓存 ${chars.length} 字`;
 							loadDictBtn.title = '点击重新加载词库';
 							
 							dictStatus.style.display = 'block';
