@@ -739,7 +739,7 @@
 					<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
 						<div style="display: flex; align-items: center; gap: 8px;">
 							<input type="checkbox" id="aiMode" style="width: 18px; height: 18px; cursor: pointer;" />
-							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode"><i class="ri-robot-2-line"></i> AI 押韵模式 </label>
+							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode"><i class="ri-robot-2-line"></i> AI 押韵模式 (Gemini 2.0 Flash) </label>
 						</div>
 						<button class="btn ghost small" id="openAiSettings" title="AI 设置"><i class="ri-settings-3-line"></i></button>
 					</div>
@@ -1428,7 +1428,7 @@
 
 		const processAI = async (src, infos, looseness) => {
 			const apiKey = localStorage.getItem('GEMINI_API_KEY');
-			const proxy = localStorage.getItem('GEMINI_PROXY') || '';
+			const proxyUrl = localStorage.getItem('GEMINI_PROXY');
 			if (!apiKey) {
 				alert('请先输入 Gemini API Key');
 				return;
@@ -1460,26 +1460,14 @@
 						6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
 
 			try {
-				let baseUrl = 'https://generativelanguage.googleapis.com';
-				if (proxy) {
-					baseUrl = proxy.replace(/\/$/, '');
+				// 使用 Electron IPC 调用 Gemini API
+				const result = await window.electronAPI.generateContent(apiKey, prompt, proxyUrl);
+
+				if (!result.success) {
+					throw new Error(result.error || 'API 调用失败');
 				}
 
-				const response = await fetch(`${baseUrl}/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						contents: [{ parts: [{ text: prompt }] }]
-					})
-				});
-
-				if (!response.ok) {
-					const errorData = await response.json().catch(() => ({}));
-					throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-				}
-
-				const data = await response.json();
-				const text = data.candidates[0].content.parts[0].text.trim();
+				const text = result.text.trim();
 				// 使用正则提取所有中文字符串，过滤掉非中文和原词
 				const aiWords = (text.match(/[\u4e00-\u9fa5]+/g) || []).filter(w => w && w !== src);
 

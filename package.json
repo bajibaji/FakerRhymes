@@ -1,0 +1,45 @@
+{
+  "name": "faker-rhymes-robot",
+  "version": "1.6.6",
+  "description": "蟹不肉,废壳押韵机器人",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
+  },
+"build": {
+  "productName": "废壳押韵机器人",
+  "appId": "com.faker.rhymes",
+  "directories": {
+    "output": "dist"
+  },
+  "win": {
+    "icon": "icon.ico",
+    "target": [
+      {
+        "target": "portable",  
+        "arch": [
+          "x64"              
+        ]
+      }
+    ]
+  },
+  "portable": {
+    "artifactName": "${productName}_便携版_${version}.${ext}" 
+  }
+},
+  "dependencies": {
+    "@google/genai": "^1.34.0",
+   
+    "https-proxy-agent": "^7.0.6",
+    "node-fetch": "^2.7.0",
+    "socks-proxy-agent": "^8.0.5",
+    "undici": "^7.16.0"
+  }
+}
