@@ -814,6 +814,7 @@
 		</div>
 	</div>
 
+	<script src="./db.js"></script>
 	<script src="./data.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" onerror="console.warn('GSAP CDN加载失败')"></script>
 	<script>
@@ -984,14 +985,26 @@
 		// 加载优化字典
 		const loadDict = async () => {
 			try {
+				// Try to load from IndexedDB first
+				const cachedData = await loadDictFromIndexedDB();
+				if (cachedData && cachedData.full) {
+					dict = cachedData.full;
+					devLog('从 IndexedDB 加载字典成功,共', Object.keys(dict).length, '条');
+					return;
+				}
+
+				// Fallback to fetch if not in DB
 				const resp = await fetch('dict_optimized.json');
 				const text = await resp.text();
 				dict = JSON.parse(text);
-			devLog('字典加载成功,共', Object.keys(dict).length, '条');
-		} catch(e) {
-			console.error('字典加载失败:', e);
-		}
-	};
+				devLog('从网络下载字典成功,共', Object.keys(dict).length, '条');
+				
+				// Optional: Save to DB in background
+				saveDictToIndexedDB({ full: dict }).catch(err => console.error('保存到 IndexedDB 失败:', err));
+			} catch(e) {
+				console.error('字典加载失败:', e);
+			}
+		};
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
@@ -2116,7 +2129,7 @@
 						reject(new Error('词库加载超时，请检查网络连接'));
 					}, 120000); // 2 minutes timeout
 
-					worker.onmessage = (event) => {
+					worker.onmessage = async (event) => {
 						const { type, message, data, progress, percent } = event.data;
 
 						if (type === 'progress' || type === 'parsing') {
@@ -2138,6 +2151,12 @@
 								// Store detailed stats for reference
 								if (stats) {
 									localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
+								}
+
+								// Also update memory dict
+								const cachedData = await loadDictFromIndexedDB();
+								if (cachedData && cachedData.full) {
+									dict = cachedData.full;
 								}
 
 								// Refresh bank

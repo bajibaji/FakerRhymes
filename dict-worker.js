@@ -1,7 +1,37 @@
 /**
  * Web Worker for background dictionary loading and processing
- * This runs in a separate thread to avoid blocking the main UI thread
+ * Optimized to handle large files and use IndexedDB
  */
+
+// Import DB logic if possible, or redefine basic IDB for worker
+const DB_NAME = 'FakerRhymesDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'dictionary';
+
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
+
+async function saveToDB(data) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put(data, 'full_dict');
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
 
 self.onmessage = async function(event) {
   const { action, payload } = event.data;
@@ -12,27 +42,17 @@ self.onmessage = async function(event) {
       
       for (const source of dictSources) {
         try {
-          // Report progress
-          self.postMessage({
-            type: 'progress',
-            message: `加载中: ${source.name}...`
-          });
+          self.postMessage({ type: 'progress', message: `正在从网络获取: ${source.name}...` });
 
-          const response = await fetch(source.url, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          });
+          const response = await fetch(source.url);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
 
-          if (!response.ok) {
-            throw new Error('HTTP ' + response.status);
-          }
-
-          // Stream large files in chunks for better progress reporting
           const contentLength = response.headers.get('content-length');
           const total = parseInt(contentLength, 10);
           const reader = response.body.getReader();
+          
           let receivedLength = 0;
-          const chunks = [];
+          let chunks = [];
 
           while (true) {
             const { done, value } = await reader.read();
@@ -42,140 +62,105 @@ self.onmessage = async function(event) {
 
             if (total) {
               const progress = Math.round((receivedLength / total) * 100);
-              self.postMessage({
-                type: 'progress',
-                message: `下载中: ${source.name}... ${progress}%`,
-                percent: progress
-              });
+              if (progress % 5 === 0) { // Reduce message frequency
+                self.postMessage({
+                  type: 'progress',
+                  message: `下载中: ${progress}%`,
+                  percent: progress
+                });
+              }
             }
           }
 
-          const chunksAll = new Uint8Array(receivedLength);
+          self.postMessage({ type: 'progress', message: '下载完成，正在解析 JSON...' });
+          
+          const allChunks = new Uint8Array(receivedLength);
           let position = 0;
           for (const chunk of chunks) {
-            chunksAll.set(chunk, position);
+            allChunks.set(chunk, position);
             position += chunk.length;
           }
-
-          const decoder = new TextDecoder();
-          const jsonStr = decoder.decode(chunksAll);
           
-          self.postMessage({
-            type: 'progress',
-            message: `解析中: ${source.name}...`
+          const jsonStr = new TextDecoder().decode(allChunks);
+          const dictData = JSON.parse(jsonStr);
+          
+          self.postMessage({ type: 'progress', message: '正在提取汉字字库...' });
+          const { chars, stats } = processDict(dictData);
+
+          self.postMessage({ type: 'progress', message: '正在存入本地数据库 (IndexedDB)...' });
+          
+          // Save both the full dictionary and the unique chars
+          await saveToDB({
+              full: dictData,
+              chars: chars,
+              stats: stats,
+              timestamp: Date.now(),
+              sourceName: source.name
           });
 
-          const data = JSON.parse(jsonStr);
-          const { chars, stats } = processDict(data);
-
-          if (chars && chars.length > 0) {
-            self.postMessage({
-              type: 'success',
-              data: {
-                chars,
-                sourceName: source.name,
-                count: chars.length,
-                stats  // 传递详细统计信息
-              }
-            });
-            return;
-          }
+          self.postMessage({
+            type: 'success',
+            data: {
+              chars,
+              sourceName: source.name,
+              stats
+            }
+          });
+          return;
         } catch (err) {
-          self.postMessage({
-            type: 'error',
-            message: `${source.name} 加载失败: ${err.message}`
-          });
-          continue;
+          console.error(err);
+          self.postMessage({ type: 'error', message: `${source.name} 失败: ${err.message}` });
         }
       }
-
-      self.postMessage({
-        type: 'error',
-        message: '所有词库源均加载失败'
-      });
     } catch (err) {
-      self.postMessage({
-        type: 'error',
-        message: `Worker 错误: ${err.message}`
-      });
+      self.postMessage({ type: 'error', message: `Worker 异常: ${err.message}` });
     }
   }
 };
 
-/**
- * Process dictionary data and extract Chinese characters
- * Supports multiple dictionary formats
- * Returns { uniqueChars, stats } for better visibility
- */
 function processDict(data) {
   const chars = new Set();
-  let stats = {
-    totalStrings: 0,
-    totalChars: 0,        // 汉字总数（计重复）
-    uniqueChars: 0,       // 去重后的唯一汉字数
-    categories: 0         // 分类数量（如果是对象格式）
-  };
+  let totalStrings = 0;
+  let totalChars = 0;
 
-  if (Array.isArray(data)) {
-    // Array of strings or objects
-    stats.categories = 1;
-    data.forEach((item, idx) => {
-      if (idx % 1000 === 0) {
-        // Report progress every 1000 items
-        self.postMessage({
-          type: 'parsing',
-          progress: Math.round((idx / data.length) * 100)
-        });
-      }
-
-      if (typeof item === 'string') {
-        stats.totalStrings++;
-        Array.from(item).forEach(ch => {
-          if (/[\u4e00-\u9fa5]/.test(ch)) {
-            stats.totalChars++;
-            chars.add(ch);
-          }
-        });
-      } else if (item && (item.word || item.char)) {
-        stats.totalStrings++;
-        const word = item.word || item.char;
-        Array.from(word).forEach(ch => {
-          if (/[\u4e00-\u9fa5]/.test(ch)) {
-            stats.totalChars++;
-            chars.add(ch);
-          }
-        });
-      }
-    });
-  } else if (data && typeof data === 'object') {
-    // Object with character arrays by rhyme/key
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
     const entries = Object.entries(data);
-    stats.categories = entries.length;
-    
-    entries.forEach(([key, value], idx) => {
-      if (idx % 5000 === 0) {
-        self.postMessage({
-          type: 'parsing',
-          progress: Math.round((idx / entries.length) * 100)
-        });
-      }
-
+    entries.forEach(([key, value]) => {
       if (Array.isArray(value)) {
-        stats.totalStrings += value.length;
-        value.forEach(item => {
-          if (typeof item === 'string') {
-            Array.from(item).forEach(ch => {
+        totalStrings += value.length;
+        value.forEach(word => {
+          if (typeof word === 'string') {
+            for (const ch of word) {
               if (/[\u4e00-\u9fa5]/.test(ch)) {
-                stats.totalChars++;
+                totalChars++;
                 chars.add(ch);
               }
-            });
+            }
           }
         });
       }
     });
+  } else if (Array.isArray(data)) {
+      data.forEach(item => {
+          const word = typeof item === 'string' ? item : (item.word || item.char);
+          if (word) {
+              totalStrings++;
+              for (const ch of word) {
+                  if (/[\u4e00-\u9fa5]/.test(ch)) {
+                      totalChars++;
+                      chars.add(ch);
+                  }
+              }
+          }
+      });
   }
 
-  stats.uniqueChars = chars.size;
-  return { chars: Array.from(chars), stats };
+  return {
+    chars: Array.from(chars),
+    stats: {
+      totalStrings,
+      totalChars,
+      uniqueChars: chars.size
+    }
+  };
 }
