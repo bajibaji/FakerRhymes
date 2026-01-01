@@ -1021,7 +1021,7 @@
 				devLog('从网络下载字典成功,共', Object.keys(dict).length, '条');
 				
 				// Optional: Save to DB in background
-				saveDictToIndexedDB({ full: dict }).catch(err => console.error('保存到 IndexedDB 失败:', err));
+				saveDictToIndexedDB(dict, [], { totalStrings: 0, totalChars: 0, uniqueChars: 0 }, '本地优化词库').catch(err => console.error('保存到 IndexedDB 失败:', err));
 			} catch(e) {
 				console.error('字典加载失败:', e);
 			}
