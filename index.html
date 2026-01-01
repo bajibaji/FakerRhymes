@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿6v1.6.6<!DOCTYPE html>
 <html lang="zh">
 <head>
 	<meta charset="UTF-8" />
@@ -188,61 +188,45 @@
 			-webkit-appearance: none;
 			appearance: none;
 			width: 100%;
-			height: 12px;
-			background: rgba(255, 255, 255, 0.1);
+			height: 8px;
+			background: rgba(255, 255, 255, 0.3);
 			border: 1px solid var(--border);
-			border-radius: 6px;
+			border-radius: 4px;
 			cursor: pointer;
 			outline: none;
-			margin: 15px 0;
 		}
 
 		input[type="range"]::-webkit-slider-thumb {
 			-webkit-appearance: none;
 			appearance: none;
-			width: 28px;
-			height: 28px;
+			width: 20px;
+			height: 20px;
 			border-radius: 50%;
 			background: linear-gradient(135deg, var(--accent), var(--accent-2));
-			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+			box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
 			cursor: pointer;
 			transition: transform 0.2s ease;
-			border: 2px solid white;
+			position: relative;
+			z-index: 1;
+		}
+
+		input[type="range"]::-webkit-slider-thumb:hover {
+			transform: scale(1.1);
 		}
 
 		input[type="range"]::-moz-range-thumb {
-			width: 28px;
-			height: 28px;
+			width: 20px;
+			height: 20px;
 			border-radius: 50%;
 			background: linear-gradient(135deg, var(--accent), var(--accent-2));
-			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+			box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
 			cursor: pointer;
-			border: 2px solid white;
+			border: none;
+			transition: transform 0.2s ease;
 		}
 
-		.range-labels {
-			display: flex;
-			justify-content: space-between;
-			padding: 0 5px;
-			margin-top: -10px;
-			margin-bottom: 20px;
-		}
-
-		.range-label {
-			font-size: 11px;
-			color: var(--muted);
-			cursor: pointer;
-			padding: 5px;
-			transition: color 0.2s;
-		}
-
-		.range-label:hover {
-			color: var(--accent-2);
-		}
-
-		.range-label.active {
-			color: var(--accent-2);
-			font-weight: bold;
+		input[type="range"]::-moz-range-thumb:hover {
+			transform: scale(1.1);
 		}
 
 		.controls {
@@ -541,6 +525,51 @@
 			font-size: 14px;
 			margin-bottom: 0;
 		}
+
+		/* Segmented Control Styles */
+		.segmented-control {
+			display: flex;
+			background: var(--card);
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			padding: 4px;
+			gap: 4px;
+			margin-top: 1px;
+			width: 100%;
+		}
+
+		.segment-btn {
+			flex: 1;
+			background: transparent;
+			border: none;
+			color: var(--muted);
+			padding: 6px 4px;
+			font-size: 13px;
+			font-weight: 600;
+			cursor: pointer;
+			border-radius: 8px;
+			transition: all 0.4s ease;
+			text-align: center;
+		}
+
+		.segment-btn:hover {
+			color: var(--text);
+			background: rgba(255, 255, 255, 0.05);
+		}
+
+		.segment-btn.active {
+			background: var(--accent);
+			color: white;
+			box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+		}
+
+		@media (max-width: 600px) {
+			.segment-btn {
+				padding: 8px 2px;
+				font-size: 12px;
+			}
+		}
+
 		/* Help Button & Modal */
 		.help-btn {
 			position: fixed;
@@ -710,7 +739,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.1</h1>
+			<h1>废壳韵脚生成器 v1.6.7</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -728,13 +757,13 @@
 						<button class="btn" id="go">生成押韵</button>
 						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
 					</div>
-					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
-					<input type="range" id="looseness" min="0" max="1" step="0.5" value="0.0" />
-					<div class="range-labels">
-						<span class="range-label active" data-value="0.0">🎯 严格</span>
-						<span class="range-label" data-value="0.5">⚖️ 中等</span>
-						<span class="range-label" data-value="1.0">🌊 最松</span>
+					<label class="small" style="margin-top: 10px;">韵脚宽松度</label>
+					<div class="segmented-control" id="loosenessSelector">
+						<button type="button" class="segment-btn active" data-value="0">严格</button>
+						<button type="button" class="segment-btn" data-value="0.5">中等</button>
+						<button type="button" class="segment-btn" data-value="1">最松</button>
 					</div>
+					<input type="hidden" id="looseness" value="0.0" />
 					
 					<!-- 平仄过滤选择器（仅在最松时显示） -->
 					<div id="pingzeFilterContainer" style="display: none; margin-top: 10px; padding: 10px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border: 1px solid var(--border);">
@@ -835,7 +864,6 @@
 		</div>
 	</div>
 
-	<script src="./db.js"></script>
 	<script src="./data.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" onerror="console.warn('GSAP CDN加载失败')"></script>
 	<script>
@@ -1006,26 +1034,14 @@
 		// 加载优化字典
 		const loadDict = async () => {
 			try {
-				// Try to load from IndexedDB first
-				const cachedData = await loadDictFromIndexedDB();
-				if (cachedData && cachedData.full) {
-					dict = cachedData.full;
-					devLog('从 IndexedDB 加载字典成功,共', Object.keys(dict).length, '条');
-					return;
-				}
-
-				// Fallback to fetch if not in DB
 				const resp = await fetch('dict_optimized.json');
 				const text = await resp.text();
 				dict = JSON.parse(text);
-				devLog('从网络下载字典成功,共', Object.keys(dict).length, '条');
-				
-				// Optional: Save to DB in background
-				saveDictToIndexedDB(dict, [], { totalStrings: 0, totalChars: 0, uniqueChars: 0 }, '本地优化词库').catch(err => console.error('保存到 IndexedDB 失败:', err));
-			} catch(e) {
-				console.error('字典加载失败:', e);
-			}
-		};
+			devLog('字典加载成功,共', Object.keys(dict).length, '条');
+		} catch(e) {
+			console.error('字典加载失败:', e);
+		}
+	};
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
@@ -2150,7 +2166,7 @@
 						reject(new Error('词库加载超时，请检查网络连接'));
 					}, 120000); // 2 minutes timeout
 
-					worker.onmessage = async (event) => {
+					worker.onmessage = (event) => {
 						const { type, message, data, progress, percent } = event.data;
 
 						if (type === 'progress' || type === 'parsing') {
@@ -2172,12 +2188,6 @@
 								// Store detailed stats for reference
 								if (stats) {
 									localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
-								}
-
-								// Also update memory dict
-								const cachedData = await loadDictFromIndexedDB();
-								if (cachedData && cachedData.full) {
-									dict = cachedData.full;
 								}
 
 								// Refresh bank
@@ -2376,7 +2386,27 @@
 			});
 
 			const loosenInput = document.getElementById('looseness');
+			const loosenessSelector = document.getElementById('loosenessSelector');
+			const segmentBtns = loosenessSelector.querySelectorAll('.segment-btn');
+			
 			const pingzeFilterContainer = document.getElementById('pingzeFilterContainer');
+			
+			// 监听分段选择器点击
+			segmentBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					// 移除旧的 active 类
+					segmentBtns.forEach(b => b.classList.remove('active'));
+					// 添加新的 active 类
+					btn.classList.add('active');
+					// 更新隐藏的 input 值
+					const val = btn.dataset.value;
+					loosenInput.value = val;
+					
+					// 触发更新
+					updatePingzeFilterVisibility();
+					triggerRecalc();
+				});
+			});
 			
 			// 监听韵脚宽松度变化，显示/隐藏平仄过滤器
 			const updatePingzeFilterVisibility = () => {
@@ -2392,34 +2422,7 @@
 				if (document.getElementById('source').value.trim()) process();
 			};
 			// 使用 debounce，延迟 300ms 后再执行查询
-			const debouncedRecalc = debounce(triggerRecalc, 100);
-			loosenInput.addEventListener('input', () => {
-				updatePingzeFilterVisibility();
-				
-				// 更新标签激活状态
-				const val = loosenInput.value;
-				document.querySelectorAll('.range-label').forEach(lbl => {
-					lbl.classList.toggle('active', lbl.dataset.value === val);
-				});
-				
-				debouncedRecalc();
-			});
-			loosenInput.addEventListener('change', () => {
-				updatePingzeFilterVisibility();
-				triggerRecalc();
-			});
-
-			// 点击标签也可以切换
-			document.querySelectorAll('.range-label').forEach(lbl => {
-				lbl.addEventListener('click', () => {
-					const val = lbl.dataset.value;
-					loosenInput.value = val;
-					// 触发 input 事件以更新 UI
-					loosenInput.dispatchEvent(new Event('input'));
-					// 触发 change 事件以执行搜索
-					loosenInput.dispatchEvent(new Event('change'));
-				});
-			});
+			const debouncedRecalc = debounce(triggerRecalc, 250);
 			
 			// 初始化平仄过滤器可见性
 			updatePingzeFilterVisibility();
