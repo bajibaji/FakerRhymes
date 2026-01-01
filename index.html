@@ -188,45 +188,61 @@
 			-webkit-appearance: none;
 			appearance: none;
 			width: 100%;
-			height: 8px;
-			background: rgba(255, 255, 255, 0.3);
+			height: 12px;
+			background: rgba(255, 255, 255, 0.1);
 			border: 1px solid var(--border);
-			border-radius: 4px;
+			border-radius: 6px;
 			cursor: pointer;
 			outline: none;
+			margin: 15px 0;
 		}
 
 		input[type="range"]::-webkit-slider-thumb {
 			-webkit-appearance: none;
 			appearance: none;
-			width: 20px;
-			height: 20px;
+			width: 28px;
+			height: 28px;
 			border-radius: 50%;
 			background: linear-gradient(135deg, var(--accent), var(--accent-2));
-			box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 			cursor: pointer;
 			transition: transform 0.2s ease;
-			position: relative;
-			z-index: 1;
-		}
-
-		input[type="range"]::-webkit-slider-thumb:hover {
-			transform: scale(1.1);
+			border: 2px solid white;
 		}
 
 		input[type="range"]::-moz-range-thumb {
-			width: 20px;
-			height: 20px;
+			width: 28px;
+			height: 28px;
 			border-radius: 50%;
 			background: linear-gradient(135deg, var(--accent), var(--accent-2));
-			box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 			cursor: pointer;
-			border: none;
-			transition: transform 0.2s ease;
+			border: 2px solid white;
 		}
 
-		input[type="range"]::-moz-range-thumb:hover {
-			transform: scale(1.1);
+		.range-labels {
+			display: flex;
+			justify-content: space-between;
+			padding: 0 5px;
+			margin-top: -10px;
+			margin-bottom: 20px;
+		}
+
+		.range-label {
+			font-size: 11px;
+			color: var(--muted);
+			cursor: pointer;
+			padding: 5px;
+			transition: color 0.2s;
+		}
+
+		.range-label:hover {
+			color: var(--accent-2);
+		}
+
+		.range-label.active {
+			color: var(--accent-2);
+			font-weight: bold;
 		}
 
 		.controls {
@@ -694,7 +710,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.6.6</h1>
+			<h1>废壳韵脚生成器 v1.7.1</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -714,6 +730,11 @@
 					</div>
 					<label class="small" for="looseness" style="margin-top: 10px;">韵脚宽松度（0=严格，1=最松）</label>
 					<input type="range" id="looseness" min="0" max="1" step="0.5" value="0.0" />
+					<div class="range-labels">
+						<span class="range-label active" data-value="0.0">🎯 严格</span>
+						<span class="range-label" data-value="0.5">⚖️ 中等</span>
+						<span class="range-label" data-value="1.0">🌊 最松</span>
+					</div>
 					
 					<!-- 平仄过滤选择器（仅在最松时显示） -->
 					<div id="pingzeFilterContainer" style="display: none; margin-top: 10px; padding: 10px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border: 1px solid var(--border);">
@@ -2374,11 +2395,30 @@
 			const debouncedRecalc = debounce(triggerRecalc, 100);
 			loosenInput.addEventListener('input', () => {
 				updatePingzeFilterVisibility();
+				
+				// 更新标签激活状态
+				const val = loosenInput.value;
+				document.querySelectorAll('.range-label').forEach(lbl => {
+					lbl.classList.toggle('active', lbl.dataset.value === val);
+				});
+				
 				debouncedRecalc();
 			});
 			loosenInput.addEventListener('change', () => {
 				updatePingzeFilterVisibility();
 				triggerRecalc();
+			});
+
+			// 点击标签也可以切换
+			document.querySelectorAll('.range-label').forEach(lbl => {
+				lbl.addEventListener('click', () => {
+					const val = lbl.dataset.value;
+					loosenInput.value = val;
+					// 触发 input 事件以更新 UI
+					loosenInput.dispatchEvent(new Event('input'));
+					// 触发 change 事件以执行搜索
+					loosenInput.dispatchEvent(new Event('change'));
+				});
 			});
 			
 			// 初始化平仄过滤器可见性
