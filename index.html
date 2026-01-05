@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>废壳韵脚生成器 v1.7.2 </title>
+	<title>废壳韵脚生成器 v1.7.3 </title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<style>
@@ -299,6 +299,81 @@
 			color: var(--muted);
 		}
 
+		.match-grid {
+			display: grid;
+			grid-template-columns: repeat(4, 1fr);
+			gap: 8px;
+			margin-top: 12px;
+		}
+
+		.match-item {
+			padding: 8px 6px;
+			background: var(--card);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			color: var(--text);
+			font-size: 14px;
+			cursor: pointer;
+			text-align: center;
+			transition: all 0.2s ease;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			user-select: none;
+		}
+
+		.match-item:hover {
+			border-color: var(--accent);
+			background: rgba(124, 58, 237, 0.1);
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		}
+
+		.match-item[data-length="4"] {
+			font-size: 13px;
+			letter-spacing: -0.5px;
+		}
+
+		.match-item[data-length="5"],
+		.match-item[data-length="6"],
+		.match-item[data-length="7"] {
+			font-size: 12px;
+			letter-spacing: -1px;
+		}
+
+		/* 手机端更多匹配结果优化 */
+		@media (max-width: 600px) {
+			.match-grid {
+				grid-template-columns: repeat(4, 1fr);
+				gap: 6px;
+			}
+			
+			.match-item {
+				padding: 6px 4px;
+				font-size: 13px;
+				border-radius: 6px;
+			}
+			
+			.match-item[data-length="4"] {
+				font-size: 12px;
+				letter-spacing: -0.3px;
+			}
+			
+			.match-item[data-length="5"],
+			.match-item[data-length="6"],
+			.match-item[data-length="7"] {
+				font-size: 11px;
+				letter-spacing: -0.5px;
+			}
+		}
+		
+		/* 超小屏幕（宽度小于360px）显示3列 */
+		@media (max-width: 360px) {
+			.match-grid {
+				grid-template-columns: repeat(3, 1fr);
+			}
+		}
+
 		.badge {
 			padding: 6px 10px;
 			border-radius: 999px;
@@ -540,9 +615,7 @@
 
 		/* Virtual List Styles removed as per user feedback */
 		#matchedResultsList {
-			display: flex !important;
-			flex-wrap: wrap;
-			gap: 8px;
+			/* 使用 match-grid 类的样式 */
 		}
 
 		.virtual-item {
@@ -801,7 +874,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.2<span style="font-size: 0.5em;">[网页版]</span></h1>
+			<h1>废壳韵脚生成器 v1.7.3<span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -889,9 +962,11 @@
 		</section>
 
 		<section class="panel" style="margin: 0 32px 20px;">
-			<div id="matchedResults" style="padding: 12px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 8px; display: none;">
-				<div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-2);">更多匹配结果：</div>
-				<div id="matchedResultsList" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+			<div id="matchedResults" style="padding: 16px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 12px; display: none;">
+				<div style="font-weight: 600; margin-bottom: 4px; color: var(--accent-2); display: flex; align-items: center; gap: 6px;">
+					<i class="ri-lightbulb-flash-line"></i> 更多匹配结果
+				</div>
+				<div id="matchedResultsList" class="match-grid"></div>
 			</div>
 			<div id="dictStatus" style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
 				<span id="dictStatusText"></span>
@@ -2240,19 +2315,49 @@
 				if (dictResult && dictResult.moreLengths && dictResult.moreLengths.length > 0) {
 					moreMatches.push(...dictResult.moreLengths);
 				}
+
+				// 过滤尾部重复的词（最后2个字），随机保留一个
+				const uniqueTailMatches = [];
+				const tailGroups = {};
 				
-				// 显示"更多匹配结果"
-				let hasContent = false;
 				moreMatches.forEach(phrase => {
+					if (!phrase) return;
+					
+					// 增加一致性过滤：确保更多匹配结果也符合严格的韵脚/声母规则
+					// 修复：之前这里漏掉了 phraseFitsSource 检查，导致一些不符合声母规则的词（如平翘舌不匹配）出现在更多结果中
+					if (!phraseFitsSource(phrase, infos, looseness)) return;
+
+					const tail = phrase.slice(-2);
+					if (!tailGroups[tail]) {
+						tailGroups[tail] = [];
+					}
+					tailGroups[tail].push(phrase);
+				});
+				
+				Object.keys(tailGroups).forEach(tail => {
+					const group = tailGroups[tail];
+					const randomPhrase = group[Math.floor(Math.random() * group.length)];
+					uniqueTailMatches.push(randomPhrase);
+				});
+				
+				// 按字数排序
+				uniqueTailMatches.sort((a, b) => a.length - b.length);
+
+/*  */				matchedResultsList.innerHTML = '';
+				matchedResultsList.className = 'match-grid';
+				
+				let hasContent = false;
+				uniqueTailMatches.forEach(phrase => {
 					if (phrase && phrase !== userInput) {
-						const span = document.createElement('span');
-						span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer;';
-						span.textContent = phrase;
-						span.addEventListener('click', () => {
+						const div = document.createElement('div');
+						div.className = 'match-item';
+						div.textContent = phrase;
+						div.dataset.length = phrase.length;
+						div.addEventListener('click', () => {
 							document.getElementById('source').value = phrase;
 							process();
 						});
-						matchedResultsList.appendChild(span);
+						matchedResultsList.appendChild(div);
 						hasContent = true;
 					}
 				});
