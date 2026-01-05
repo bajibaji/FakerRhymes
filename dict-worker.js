@@ -120,7 +120,7 @@ self.onmessage = async function(event) {
         try {
           self.postMessage({
             type: 'progress',
-            message: `加载中: ${source.name}`
+            message: `加载中: ${source.name}...`
           });
 
           const response = await fetch(source.url, {
@@ -148,7 +148,7 @@ self.onmessage = async function(event) {
               const progress = Math.round((receivedLength / total) * 100);
               self.postMessage({
                 type: 'progress',
-                message: `下载中: ${progress}%`,
+                message: `下载中: ${source.name}... ${progress}%`,
                 percent: progress
               });
             }
@@ -156,7 +156,11 @@ self.onmessage = async function(event) {
 
           self.postMessage({
             type: 'progress',
+<<<<<<< HEAD
             message: `解析${source.name}...`
+=======
+            message: `解析中: ${source.name}...`
+>>>>>>> parent of c4c37cd (Revert "1.7.1 web update")
           });
 
           // Use Response.json() for potentially faster native parsing
