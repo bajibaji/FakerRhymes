@@ -3,6 +3,7 @@
  * This runs in a separate thread to avoid blocking the main UI thread
  */
 
+<<<<<<< HEAD
 // Final to short code mapping
 const finalToCode = {
   'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
@@ -109,6 +110,8 @@ async function saveToDB(data) {
   });
 }
 
+=======
+>>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
 self.onmessage = async function(event) {
   const { action, payload } = event.data;
 
@@ -163,6 +166,7 @@ self.onmessage = async function(event) {
 >>>>>>> parent of c4c37cd (Revert "1.7.1 web update")
           });
 
+<<<<<<< HEAD
           // Use Response.json() for potentially faster native parsing
           const data = await response.json();
           
@@ -199,11 +203,19 @@ self.onmessage = async function(event) {
 
           if (uniqueChars.size > 0) {
             await saveToDB(optimizedDict);
+=======
+          const data = JSON.parse(jsonStr);
+          const { chars, stats } = processDict(data);
+>>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
 
             self.postMessage({
               type: 'success',
               data: {
+<<<<<<< HEAD
                 chars: Array.from(uniqueChars),
+=======
+                chars,
+>>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
                 sourceName: source.name,
                 count: uniqueChars.size
               }

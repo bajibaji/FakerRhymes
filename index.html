@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿6v1.6.6<!DOCTYPE html>
 <html lang="zh">
 <head>
 	<meta charset="UTF-8" />
@@ -538,22 +538,6 @@
 			width: 100%;
 		}
 
-		/* Virtual List Styles removed as per user feedback */
-		#matchedResultsList {
-			display: flex !important;
-			flex-wrap: wrap;
-			gap: 8px;
-		}
-
-		.virtual-item {
-			padding: 6px 12px;
-			background: var(--card);
-			border: 1px solid var(--border);
-			border-radius: 6px;
-			color: var(--text);
-			font-size: 14px;
-		}
-
 		.segment-btn {
 			flex: 1;
 			background: transparent;
@@ -795,7 +779,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.0</h1>
+			<h1>废壳韵脚生成器 v1.6.7</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -1141,62 +1125,6 @@
 			});
 		};
 
-		// Final to short code mapping
-		const finalToCode = {
-			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
-			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
-			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
-			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'B', 'üan': 'C', 'ün': 'D'
-		};
-
-		function encodeKey(key) {
-			if (!key) return key;
-			return key.split('_').map(part => {
-				const match = part.match(/^(.+)([0-4])$/);
-				if (match) {
-					const [_, final, tone] = match;
-					return (finalToCode[final] || final) + tone;
-				}
-				return part;
-			}).join('');
-		}
-
-		// Bloom Filter implementation
-		class BloomFilter {
-			constructor(size = 10000, hashCount = 3) {
-				this.size = size;
-				this.hashCount = hashCount;
-				this.bitArray = new Uint8Array(Math.ceil(size / 8));
-			}
-
-			_hash(string, seed) {
-				let hash = 0;
-				for (let i = 0; i < string.length; i++) {
-					hash = (hash * 31 + string.charCodeAt(i) + seed) % this.size;
-				}
-				return hash;
-			}
-
-			add(string) {
-				for (let i = 0; i < this.hashCount; i++) {
-					const index = this._hash(string, i);
-					this.bitArray[index >> 3] |= (1 << (index & 7));
-				}
-			}
-
-			mightContain(string) {
-				for (let i = 0; i < this.hashCount; i++) {
-					const index = this._hash(string, i);
-					if (!(this.bitArray[index >> 3] & (1 << (index & 7)))) {
-						return false;
-					}
-				}
-				return true;
-			}
-		}
-
-		let bloomFilter = new BloomFilter();
-
 		// 加载优化字典
 		const loadDict = async () => {
 			// 如果已经在加载了，直接返回
@@ -1204,6 +1132,7 @@
 			window.isDictLoading = true;
 
 			try {
+<<<<<<< HEAD
 				// 1. 极速初始化：优先检查本地缓存
 				const allKeys = await getAllKeysFromDB();
 				if (allKeys && allKeys.length > 0) {
@@ -1261,6 +1190,16 @@
 				window.isDictLoading = false;
 			}
 		};
+=======
+				const resp = await fetch('dict_optimized.json');
+				const text = await resp.text();
+				dict = JSON.parse(text);
+			devLog('字典加载成功,共', Object.keys(dict).length, '条');
+		} catch(e) {
+			console.error('字典加载失败:', e);
+		}
+	};
+>>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
@@ -1453,8 +1392,7 @@
 
 					for (const fin of expandedVariants) {
 						for (const tone of toneVariants) {
-							const keyPart = `${fin}${tone}`;
-							recurse(index + 1, [...current, keyPart]);
+							recurse(index + 1, [...current, `${fin}${tone}`]);
 						}
 					}
 				};
@@ -1465,12 +1403,7 @@
 			const queryKeys = generateQueryKeys(validInfos);
 			const queryVariantSet = new Set();
 			queryKeys.forEach(k => {
-				buildKeyVariants(k).forEach(v => {
-					const encoded = encodeKey(v);
-					if (bloomFilter.mightContain(encoded)) {
-						queryVariantSet.add(encoded);
-					}
-				});
+				buildKeyVariants(k).forEach(v => queryVariantSet.add(v));
 			});
 
 			// 特殊处理：如果没有任何变体通过 Bloom Filter，尝试只查询末尾字
@@ -1491,6 +1424,7 @@
 			const matchedByWordCount = {};
 			const sourceLength = infos.length;
 			
+<<<<<<< HEAD
 			// 优化方案：移动端优先，只使用精准哈希查询，彻底移除全字典扫描
 			// 从 IndexedDB 中逐个查询命中的变体
 			for (const qk of queryVariantSet) {
@@ -1508,6 +1442,29 @@
 						}
 						if (!matchedByWordCount[phraseLen].includes(phrase)) {
 							matchedByWordCount[phraseLen].push(phrase);
+=======
+			// 遍历优化字典寻找匹配
+			if (dict) {
+				for (const [dictKey, candidates] of Object.entries(dict)) {
+					const dictVariants = buildKeyVariants(dictKey);
+					const hasMatch = dictVariants.some(dk => {
+						for (const qk of queryVariantSet) {
+							if (dk === qk || dk.endsWith('_' + qk)) return true;
+						}
+						return false;
+					});
+					if (!hasMatch) continue;
+					if (candidates && Array.isArray(candidates)) {
+						for (const phrase of candidates) {
+							const phraseLen = Array.from(phrase).length;
+							// 按字数分类
+							if (!matchedByWordCount[phraseLen]) {
+								matchedByWordCount[phraseLen] = [];
+							}
+							if (!matchedByWordCount[phraseLen].includes(phrase)) {
+								matchedByWordCount[phraseLen].push(phrase);
+							}
+>>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
 						}
 					}
 				}
@@ -1898,15 +1855,19 @@
 			// 首先清空列表
 			matchedResultsList.innerHTML = '';
 			
-			// 收集所有匹配词
-			let allMatchedPhrases = [];
+			// 优先展示“少一字”的匹配，其次再展示更多字数的匹配
 			const seen = new Set();
-			const collectPhrase = (phrase) => {
+			const appendPhrase = (phrase) => {
 				if (seen.has(phrase)) return;
+				// 排除与用户输入相同的词
 				if (phrase === userInput) return;
+				// 排除包含用户输入词的词
 				if (phrase.includes(userInput)) return;
 				seen.add(phrase);
-				allMatchedPhrases.push(phrase);
+				const span = document.createElement('span');
+				span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
+				span.textContent = phrase;
+				matchedResultsList.appendChild(span);
 			};
 
 			if (dictResult) {
@@ -1914,43 +1875,61 @@
 				if (dictResult.lessLength && dictResult.lessLength.length > 0) {
 					let filteredLess = dictResult.lessLength.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
 					let displayLess = filteredLess.length > 0 ? filteredLess : dictResult.lessLength;
+					
+					// 应用平仄过滤（仅在最松时有效）
 					if (looseness >= 1.0 && pingzeFilter !== 'all') {
 						displayLess = filterByPingZe(displayLess, pingzeFilter);
 					}
-					displayLess.forEach(collectPhrase);
+					
+					displayLess.forEach(appendPhrase);
 				}
 
-				// 更多字匹配
+				// 更多字匹配：两字词全部展示，超过2字的按尾部两字分组随机展示一个
 				if (dictResult.moreLengths && dictResult.moreLengths.length > 0) {
 					let filteredMore = dictResult.moreLengths.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
 					let displayMore = filteredMore.length > 0 ? filteredMore : dictResult.moreLengths;
+					
+					// 应用平仄过滤（仅在最松时有效）
 					if (looseness >= 1.0 && pingzeFilter !== 'all') {
 						displayMore = filterByPingZe(displayMore, pingzeFilter);
 					}
 					
+					// 按字数分组
 					const groupedByLength = {};
 					for (const phrase of displayMore) {
 						const len = Array.from(phrase).length;
-						if (!groupedByLength[len]) groupedByLength[len] = [];
+						if (!groupedByLength[len]) {
+							groupedByLength[len] = [];
+						}
 						groupedByLength[len].push(phrase);
 					}
 					
+					// 对每个字数组处理
 					for (const [len, phrases] of Object.entries(groupedByLength)) {
 						const lengthNum = parseInt(len);
+						
+						// 两字词直接全部展示
 						if (lengthNum <= 2) {
-							phrases.forEach(collectPhrase);
+							phrases.forEach(appendPhrase);
 							continue;
 						}
+						
+						// 超过2字的按尾部两字分组并随机选一个
 						const groupedByTail = {};
 						for (const phrase of phrases) {
 							const chars = Array.from(phrase);
+							// 获取尾部两个字
 							const tail = chars.length >= 2 ? chars.slice(-2).join('') : phrase;
-							if (!groupedByTail[tail]) groupedByTail[tail] = [];
+							if (!groupedByTail[tail]) {
+								groupedByTail[tail] = [];
+							}
 							groupedByTail[tail].push(phrase);
 						}
+						
+						// 从每个尾部分组中随机选一个
 						for (const [tail, phrasesWithSameTail] of Object.entries(groupedByTail)) {
 							const randomIndex = Math.floor(Math.random() * phrasesWithSameTail.length);
-							collectPhrase(phrasesWithSameTail[randomIndex]);
+							appendPhrase(phrasesWithSameTail[randomIndex]);
 						}
 					}
 				}
@@ -1958,17 +1937,6 @@
 			
 			// 始终显示容器
 			matchedResults.style.display = 'block';
-			
-			if (allMatchedPhrases.length > 0) {
-				const container = document.getElementById('matchedResultsList');
-				container.innerHTML = '';
-				allMatchedPhrases.forEach(phrase => {
-					const span = document.createElement('span');
-					span.className = 'virtual-item';
-					span.textContent = phrase;
-					container.appendChild(span);
-				});
-			}
 			
 			if (dictResult) {
 				devLog('字典查询成功');
@@ -2399,9 +2367,87 @@
 					throw err;
 				};
 
+<<<<<<< HEAD
 				worker.postMessage({
 					action: 'loadAndProcess',
 					payload: { dictSources: [{ name: '优化词库', url: './dict_optimized.json' }] }
+=======
+					worker.onmessage = (event) => {
+						const { type, message, data, progress, percent } = event.data;
+
+						if (type === 'progress' || type === 'parsing') {
+							btn.textContent = message || `加载中... ${percent || progress}%`;
+							if (percent) {
+								progressBar.style.width = percent + '%';
+							}
+						}
+
+						if (type === 'success') {
+							clearTimeout(timeout);
+							worker.terminate();
+
+							const { chars, sourceName, stats } = data;
+							try {
+								localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars));
+								localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
+								localStorage.setItem('ONLINE_DICT_SOURCE', sourceName);
+								// Store detailed stats for reference
+								if (stats) {
+									localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
+								}
+
+								// Refresh bank
+								if (window.refreshRhymeBank) window.refreshRhymeBank();
+								bankMap = registerBank();
+
+								btn.textContent = `✓ 已加载 ${chars.length} 字`;
+								btn.style.background = 'rgba(34, 211, 238, 0.2)';
+								progressBar.style.width = '100%';
+
+								const dictStatus = document.getElementById('dictStatus');
+								const dictStatusText = document.getElementById('dictStatusText');
+								const date = new Date();
+								dictStatus.style.display = 'block';
+								
+								// Build detailed status text with stats
+								let statusText = `📖 词库：${chars.length} 个唯一汉字（${sourceName}）`;
+								if (stats && stats.totalChars) {
+									statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
+								}
+								statusText += ` | ${date.toLocaleString('zh-CN')}`;
+								dictStatusText.textContent = statusText;
+
+								setTimeout(() => {
+						btn.innerHTML = `<i class="ri-book-2-line"></i> 已缓存 ${chars.length} 字`;
+									btn.style.background = '';
+									progressBar.style.display = 'none';
+								}, 1500);
+
+								resolve();
+							} catch (err) {
+								reject(err);
+							}
+						}
+
+						if (type === 'error') {
+							clearTimeout(timeout);
+							worker.terminate();
+							reject(new Error(message));
+						}
+					};
+
+					worker.onerror = (err) => {
+						clearTimeout(timeout);
+						worker.terminate();
+						reject(err);
+					};
+
+					// Send message to worker
+					worker.postMessage({
+						action: 'loadAndProcess',
+						payload: { dictSources }
+					});
+>>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
 				});
 
 			} catch (err) {
