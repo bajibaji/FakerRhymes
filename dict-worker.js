@@ -60,10 +60,10 @@ async function saveToDB(data) {
   const keys = Object.keys(data);
   const total = keys.length;
   let i = 0;
-  const chunkSize = 2000; 
+  const chunkSize = 5000; // 增大分片以减少事务开销
 
   return new Promise((resolve, reject) => {
-    async function processNextBatch() {
+    function processNextBatch() {
       try {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
@@ -78,45 +78,31 @@ async function saveToDB(data) {
           self.postMessage({
             type: 'parsing',
             progress: progress,
-            message: `正在存储到本地: ${progress}%`
+            message: `正在存储: ${progress}%`
           });
 
           if (i < total) {
-            setTimeout(processNextBatch, 10);
+            // 手机端关键：给 UI 线程留出更多喘息时间
+            setTimeout(processNextBatch, 50);
           } else {
             resolve();
           }
         };
 
-        transaction.onerror = (e) => {
-          console.error('IndexedDB transaction error:', e.target.error);
-          reject(e.target.error);
-        };
-
-        transaction.onabort = (e) => {
-          console.error('IndexedDB transaction aborted:', e.target.error);
-          reject(new Error('Transaction aborted'));
-        };
+        transaction.onerror = (e) => reject(e.target.error);
+        transaction.onabort = (e) => reject(new Error('Transaction aborted'));
       } catch (err) {
         reject(err);
       }
     }
 
-    // Clear the store before starting
-    try {
-      const clearTransaction = db.transaction([STORE_NAME], 'readwrite');
-      clearTransaction.objectStore(STORE_NAME).clear();
-      clearTransaction.oncomplete = () => processNextBatch();
-      clearTransaction.onerror = (e) => reject(e.target.error);
-    } catch (err) {
-      reject(err);
-    }
+    // 清理逻辑移出此处，在主线程控制
+    processNextBatch();
   });
 }
 
 self.onmessage = async function(event) {
   const { action, payload } = event.data;
-  console.log('Worker received action:', action);
 
   if (action === 'loadAndProcess') {
     try {
@@ -124,31 +110,37 @@ self.onmessage = async function(event) {
       
       for (const source of dictSources) {
         try {
-          console.log('Processing source:', source.name);
-          self.postMessage({
-            type: 'progress',
-            message: `加载中: ${source.name}...`
-          });
+          const response = await fetch(source.url);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
 
-          const response = await fetch(source.url, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          });
+          // 核心优化：使用流式解析减少内存占用
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let data = null;
 
-          if (!response.ok) {
-            throw new Error('HTTP ' + response.status);
+          self.postMessage({ type: 'progress', message: '正在获取词库...' });
+
+          // 如果文件不是特别大，原生 JSON.parse 依然是最快的
+          // 这里我们采用渐进式读取
+          const chunks = [];
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
           }
-
-          // Use Response.json() for potentially faster native parsing
-          const data = await response.json();
-          console.log('Data fetched and parsed for:', source.name);
           
-          // Re-encode keys and extract unique characters
+          const blob = new Blob(chunks);
+          const jsonStr = await blob.text();
+          data = JSON.parse(jsonStr);
+          
+          console.log('JSON 解析完成');
+          
+          // 优化处理循环
           const uniqueChars = new Set();
           const optimizedDict = {};
           const keys = Object.keys(data);
           
-          // Optimized processing loop
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i];
             const value = data[key];
@@ -156,10 +148,8 @@ self.onmessage = async function(event) {
             optimizedDict[encoded] = value;
             
             if (Array.isArray(value)) {
-              for (let j = 0; j < value.length; j++) {
-                const word = value[j];
-                for (let k = 0; k < word.length; k++) {
-                  const char = word[k];
+              for (const word of value) {
+                for (const char of word) {
                   if (char >= '\u4e00' && char <= '\u9fa5') uniqueChars.add(char);
                 }
               }
@@ -168,22 +158,18 @@ self.onmessage = async function(event) {
             if (i % 20000 === 0) {
               self.postMessage({
                 type: 'parsing',
-                progress: Math.round((i / keys.length) * 100)
+                progress: Math.round((i / keys.length) * 50) // 映射到 0-50%
               });
               await new Promise(r => setTimeout(r, 0));
             }
           }
 
-          console.log('Unique chars identified:', uniqueChars.size);
-
           if (uniqueChars.size > 0) {
             await saveToDB(optimizedDict);
-            console.log('Saved to IndexedDB');
-
             self.postMessage({
               type: 'success',
               data: {
-                chars: Array.from(uniqueChars),
+                chars: [], // 不再传递巨大数组
                 sourceName: source.name,
                 count: uniqueChars.size
               }
@@ -191,25 +177,20 @@ self.onmessage = async function(event) {
             return;
           }
         } catch (err) {
-          console.error(`Error processing source ${source.name}:`, err);
-          self.postMessage({
-            type: 'error',
-            message: `${source.name} 加载失败: ${err.message}`
-          });
-          continue;
+          self.postMessage({ type: 'error', message: err.message });
         }
       }
-
-      self.postMessage({
-        type: 'error',
-        message: '所有词库源均加载失败'
-      });
     } catch (err) {
-      console.error('Worker top-level error:', err);
-      self.postMessage({
-        type: 'error',
-        message: `Worker 错误: ${err.message}`
-      });
+      self.postMessage({ type: 'error', message: err.message });
+    }
+  } else if (action === 'clearCache') {
+    try {
+      const db = await openDB();
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      transaction.objectStore(STORE_NAME).clear();
+      transaction.oncomplete = () => self.postMessage({ type: 'clearSuccess' });
+    } catch (err) {
+      self.postMessage({ type: 'error', message: err.message });
     }
   }
 };

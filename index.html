@@ -818,6 +818,7 @@
 					<div style="display: flex; gap: 10px; flex-wrap: wrap;">
 						<button class="btn" id="go">生成押韵</button>
 						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
+						<button class="btn ghost small" id="clearDictBtn" title="清理本地缓存的词库数据" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><i class="ri-delete-bin-line"></i> 清理缓存</button>
 					</div>
 					<label class="small" style="margin-top: 10px;">韵脚宽松度</label>
 					<div class="segmented-control" id="loosenessSelector">
@@ -2594,6 +2595,38 @@
 
 			const loadDictBtn = document.getElementById('loadDictBtn');
 			loadDictBtn.addEventListener('click', loadOnlineDict);
+
+			const clearDictBtn = document.getElementById('clearDictBtn');
+			clearDictBtn.addEventListener('click', () => {
+				if (!confirm('确定要清理本地缓存的词库数据吗？清理后需要重新加载词库才能正常使用。')) return;
+				
+				const originalText = clearDictBtn.innerHTML;
+				clearDictBtn.innerHTML = '<i class="ri-loader-4-line"></i> 清理中...';
+				clearDictBtn.disabled = true;
+
+				const worker = new Worker('./dict-worker.js');
+				worker.onmessage = (event) => {
+					if (event.data.type === 'clearSuccess') {
+						localStorage.removeItem('ONLINE_DICT_TIME');
+						localStorage.removeItem('ONLINE_DICT_COUNT');
+						localStorage.removeItem('ONLINE_DICT_CACHE');
+						localStorage.removeItem('ONLINE_DICT_STATS');
+						
+						bloomFilter = new BloomFilter();
+						window.dictLoaded = false;
+						
+						clearDictBtn.innerHTML = '<i class="ri-check-line"></i> 已清理';
+						updateDictStatus();
+						
+						setTimeout(() => {
+							clearDictBtn.innerHTML = originalText;
+							clearDictBtn.disabled = false;
+						}, 2000);
+						worker.terminate();
+					}
+				};
+				worker.postMessage({ action: 'clearCache' });
+			});
 
 			// AI Mode Logic
 			const aiModeCheckbox = document.getElementById('aiMode');
