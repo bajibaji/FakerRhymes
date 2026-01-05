@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>废壳韵脚生成器 v1.7.1 (Web)</title>
+	<title>废壳韵脚生成器 v1.7.1 </title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<style>
@@ -795,22 +795,13 @@
 	</style>
 </head>
 <body>
-	<div id="loadingSplash">
-		<div class="splash-logo">FakerRhymes</div>
-		<div class="splash-loader"></div>
-		<div id="splashProgressText" class="splash-text">正在初始化...</div>
-		<div style="width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 15px; overflow: hidden;">
-			<div id="splashProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.3s ease;"></div>
-		</div>
-	</div>
-
 	<div class="bg-blob blob-1"></div>
 	<div class="bg-blob blob-2"></div>
 	<div class="bg-blob blob-3"></div>
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.1</h1>
+			<h1>废壳韵脚生成器 v1.7.1<span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -957,14 +948,6 @@
 				if (window.isAnimationsStarted) return;
 				window.isAnimationsStarted = true;
 
-				const splash = document.getElementById('loadingSplash');
-				if (splash) {
-					splash.style.opacity = '0';
-					setTimeout(() => {
-						splash.style.visibility = 'hidden';
-					}, 500);
-				}
-
 				// 1. Background Blobs Floating
 				gsap.to(".blob-1", {
 					x: "20%", y: "20%", duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut"
@@ -979,32 +962,37 @@
 				// 2. Entry Animations
 				const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
 
-				tl.from(".shell", {
-					y: 30,
-					opacity: 0,
+				tl.to(".shell", {
+					y: 0,
+					opacity: 1,
 					duration: 1,
+					startAt: { y: 30, opacity: 0 },
 					clearProps: "all"
 				})
-				.from("header h1", {
-					y: 20,
-					opacity: 0,
-					duration: 0.4
+				tl.to("header h1", {
+					y: 0,
+					opacity: 1,
+					duration: 0.4,
+					startAt: { y: 20, opacity: 0 }
 				}, "-=0.8")
-				.from("header .subtitle", {
-					y: 10,
-					opacity: 0,
-					duration: 0.2
+				.to("header .subtitle", {
+					y: 0,
+					opacity: 1,
+					duration: 0.2,
+					startAt: { y: 10, opacity: 0 }
 				}, "-=0.6")
-				.from(".panel", {
-					y: 30,
-					opacity: 0,
+				.to(".panel", {
+					y: 0,
+					opacity: 1,
 					duration: 0.1,
 					stagger: 0.15,
+					startAt: { y: 30, opacity: 0 },
 					clearProps: "all"
 				}, "-=0.6")
-				.from(".footer", {
-					opacity: 0,
+				.to(".footer", {
+					opacity: 1,
 					duration: 1,
+					startAt: { opacity: 0 },
 					clearProps: "all"
 				}, "-=0.4");
 			};
@@ -1221,88 +1209,71 @@
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
 
-			const splashText = document.getElementById('splashProgressText');
-			const splashBar = document.getElementById('splashProgressBar');
-
-			const updateSplash = (text, percent) => {
-				if (splashText) splashText.textContent = text;
-				if (splashBar) splashBar.style.width = percent + '%';
-			};
-
 			try {
-				updateSplash('检查本地缓存...', 10);
-				// 尝试从 IndexedDB 加载
+				// 1. 极速初始化：优先检查本地缓存
 				const allKeys = await getAllKeysFromDB();
 				if (allKeys && allKeys.length > 0) {
-					updateSplash('初始化词库索引...', 50);
-					devLog('从 IndexedDB 发现缓存词库，初始化 Bloom Filter');
+					devLog('从 IndexedDB 发现缓存词库，开始极速索引重建');
 					bloomFilter = new BloomFilter(allKeys.length * 10, 3);
-					for (let i = 0; i < allKeys.length; i++) {
-						bloomFilter.add(allKeys[i]);
-						if (i % 1000 === 0) {
-							updateSplash('初始化词库索引...', 50 + Math.round((i / allKeys.length) * 40));
+					
+					// 极致优化：主线程重建索引使用更大的批次和 requestIdleCallback
+					const buildBatch = (startIndex) => {
+						const batchSize = 15000; // 进一步增加批次
+						const endIndex = Math.min(startIndex + batchSize, allKeys.length);
+						for (let i = startIndex; i < endIndex; i++) {
+							bloomFilter.add(allKeys[i]);
 						}
-					}
-					updateSplash('准备就绪', 100);
-					window.dictLoaded = true;
-					setTimeout(() => {
-						if (window.startMainAnimations) {
-							window.startMainAnimations();
+						if (endIndex < allKeys.length) {
+							if (window.requestIdleCallback) {
+								requestIdleCallback(() => buildBatch(endIndex));
+							} else {
+								setTimeout(() => buildBatch(endIndex), 0);
+							}
+						} else {
+							window.dictLoaded = true;
+							devLog('Bloom Filter 索引重建耗时:', (performance.now() - startTime).toFixed(2), 'ms');
 						}
-					}, 300);
+					};
+					const startTime = performance.now();
+					buildBatch(0);
 					window.isDictLoading = false;
 					return;
 				}
 
-				// 如果 IndexedDB 没有，则通过网络获取并存储
-				updateSplash('正在下载词库...', 10);
-				
-				// 使用 Web Worker 加载
+				// 2. 首次启动：使用原生流式解析
 				if (typeof Worker !== 'undefined') {
 					const worker = new Worker('./dict-worker.js');
+<<<<<<< HEAD
+					worker.onmessage = async (event) => {
+						const { type, message } = event.data;
+						if (type === 'success') {
+							const keys = await getAllKeysFromDB();
+							bloomFilter = new BloomFilter(keys.length * 10, 3);
+							keys.forEach(k => bloomFilter.add(k));
+=======
 					worker.onmessage = (event) => {
-						const { type, message, data, percent, progress } = event.data;
+						const { type, message, data, percent } = event.data;
 						if (type === 'progress') {
-							updateSplash(message, percent ? Math.round(percent * 0.4) : undefined);
+							updateSplash(message, percent ? Math.round(percent * 0.8) : undefined);
 						} else if (type === 'parsing') {
-							updateSplash(message || '正在解析并存储...', 40 + Math.round(progress * 0.6));
+							updateSplash('正在解析数据...', 80 + Math.round(event.data.progress * 0.1));
 						} else if (type === 'success') {
 							updateSplash('词库加载成功', 100);
+>>>>>>> parent of 2fb5f8f (4)
 							window.dictLoaded = true;
-							// 同样初始化 Bloom Filter
-							getAllKeysFromDB().then(keys => {
-								bloomFilter = new BloomFilter(keys.length * 10, 3);
-								keys.forEach(k => bloomFilter.add(k));
-								setTimeout(() => {
-									if (window.startMainAnimations) {
-										window.startMainAnimations();
-									}
-								}, 300);
-							});
 							worker.terminate();
 						} else if (type === 'error') {
-							updateSplash('词库加载失败', 0);
-							console.error(message);
-							if (window.startMainAnimations) window.startMainAnimations();
+							console.error('后台加载失败:', message);
 							worker.terminate();
 						}
 					};
 					worker.postMessage({
 						action: 'loadAndProcess',
-						payload: { dictSources: [{ name: '优化词库', url: './dict_optimized.json' }] }
+						payload: { dictSources: [{ name: '核心词库', url: './dict_optimized.json' }] }
 					});
-				} else {
-					// Fallback to old fetch logic if worker is not available
-					const resp = await fetch('dict_optimized.json');
-					const rawDict = await resp.json();
-					// ...
-					if (window.startMainAnimations) window.startMainAnimations();
 				}
 			} catch(e) {
-				console.error('字典加载失败:', e);
-				if (window.startMainAnimations) {
-					window.startMainAnimations();
-				}
+				console.error('加载流程异常:', e);
 			} finally {
 				window.isDictLoading = false;
 			}
@@ -1418,8 +1389,19 @@
 			{ name: '油求辙', finals: ['ou', 'iu', 'iou'] }
 		];
 
+<<<<<<< HEAD
 		const coreRhymes = ['a', 'o', 'e', 'i', 'u', 'v', 'ai', 'ei', 'ao', 'ou', 'an', 'en', 'ang', 'eng', 'ong'];
 
+		const finalToChunk = (fin) => {
+			// 根据韵母的第一个字符或核心部分进行分片
+			for (let i = 0; i < thirteenTracks.length; i++) {
+				if (thirteenTracks[i].finals.includes(fin)) return `chunk_${i}`;
+			}
+			return 'chunk_other';
+		};
+
+=======
+>>>>>>> parent of 2fb5f8f (4)
 		// 松紧分级：
 		// 0（严格）：同韵同调（区分平翘舌、前后鼻音）
 		// 1（中等）：同调，但韵母放宽（不分平翘舌，不分前后鼻音）
@@ -1510,20 +1492,6 @@
 					}
 				});
 			});
-
-			// 特殊处理：如果没有任何变体通过 Bloom Filter，尝试只查询末尾字
-			if (queryVariantSet.size === 0 && validInfos.length > 1) {
-				const lastInfo = [validInfos[validInfos.length - 1]];
-				const lastKeys = generateQueryKeys(lastInfo);
-				lastKeys.forEach(k => {
-					buildKeyVariants(k).forEach(v => {
-						const encoded = encodeKey(v);
-						if (bloomFilter.mightContain(encoded)) {
-							queryVariantSet.add(encoded);
-						}
-					});
-				});
-			}
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
@@ -1536,11 +1504,6 @@
 				if (candidates && Array.isArray(candidates)) {
 					for (const phrase of candidates) {
 						const phraseLen = Array.from(phrase).length;
-						// 如果是单字查询结果，只保留匹配原句长度的词条（作为回退）
-						if (validInfos.length > 1 && queryKeys.length > 0 && !queryKeys.some(qk2 => encodeKey(qk2) === qk)) {
-							if (phraseLen !== sourceLength) continue;
-						}
-						
 						if (!matchedByWordCount[phraseLen]) {
 							matchedByWordCount[phraseLen] = [];
 						}
@@ -2392,143 +2355,60 @@
 			btn.innerHTML = '<i class="ri-loader-4-line"></i> 加载中...';
 			btn.disabled = true;
 
-			// Check if Web Worker is supported
-			if (typeof Worker === 'undefined') {
-				// Fallback to synchronous loading if Worker not supported
-				console.warn('Web Worker not supported, using fallback method');
-				await loadOnlineDictFallback();
-				return;
-			}
-
 			try {
-				// Create progress display element if not exists
-				let progressBar = document.getElementById('dictProgressBar');
-				if (!progressBar) {
-					progressBar = document.createElement('div');
-					progressBar.id = 'dictProgressBar';
-					progressBar.style.cssText = `
-						position: fixed;
-						top: 0;
-						left: 0;
-						right: 0;
-						height: 3px;
-						background: linear-gradient(90deg, #7c3aed, #22d3ee);
-						z-index: 9999;
-						display: none;
-						width: 0%;
-						transition: width 0.3s ease;
-					`;
-					document.body.insertBefore(progressBar, document.body.firstChild);
+				if (typeof Worker === 'undefined') {
+					throw new Error('您的浏览器不支持 Web Worker，无法加载大词库');
 				}
-				progressBar.style.display = 'block';
 
-				// Use Web Worker for background processing
 				const worker = new Worker('./dict-worker.js');
+				worker.onmessage = async (event) => {
+					const { type, message, data, percent, progress } = event.data;
 
-				const dictSources = [
-					{
-						name: '本地优化词库',
-						url: './dict_optimized.json'
+					if (type === 'progress') {
+						btn.textContent = `${message} ${percent ? percent + '%' : ''}`;
+					} else if (type === 'parsing') {
+						btn.textContent = `解析存储中: ${progress || 0}%`;
+					} else if (type === 'success') {
+						const { chars } = data;
+						// 更新本地存储状态（仅用于显示）
+						localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
+						localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars.slice(0, 100))); // 仅存少量用于显示数量
+						localStorage.setItem('ONLINE_DICT_COUNT', chars.length.toString());
+						
+						// 重建索引
+						const keys = await getAllKeysFromDB();
+						bloomFilter = new BloomFilter(keys.length * 10, 3);
+						keys.forEach(k => bloomFilter.add(k));
+						
+						btn.textContent = `✓ 已加载 ${chars.length} 字`;
+						btn.style.background = 'rgba(34, 211, 238, 0.2)';
+						window.dictLoaded = true;
+						
+						setTimeout(() => {
+							btn.innerHTML = `✅ 已缓存 ${chars.length} 字`;
+							btn.disabled = false;
+							btn.style.background = '';
+							updateDictStatus();
+						}, 2000);
+						worker.terminate();
+					} else if (type === 'error') {
+						throw new Error(message);
 					}
-				];
+				};
 
-				return new Promise((resolve, reject) => {
-					const timeout = setTimeout(() => {
-						worker.terminate();
-						reject(new Error('词库加载超时，请检查网络连接'));
-					}, 120000); // 2 minutes timeout
+				worker.onerror = (err) => {
+					throw err;
+				};
 
-					worker.onmessage = (event) => {
-						const { type, message, data, progress, percent } = event.data;
-
-						if (type === 'progress' || type === 'parsing') {
-							btn.textContent = message || `加载中... ${percent || progress}%`;
-							if (percent) {
-								progressBar.style.width = percent + '%';
-							}
-						}
-
-						if (type === 'success') {
-							clearTimeout(timeout);
-							worker.terminate();
-
-							const { chars, sourceName, stats } = data;
-							try {
-								localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars));
-								localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
-								localStorage.setItem('ONLINE_DICT_SOURCE', sourceName);
-								// Store detailed stats for reference
-								if (stats) {
-									localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
-								}
-
-								// Handle encoded dictionary from worker
-								if (data.optimizedDict) {
-									dict = data.optimizedDict;
-									bloomFilter = new BloomFilter(Object.keys(dict).length * 10, 3);
-									for (const key of Object.keys(dict)) {
-										bloomFilter.add(key);
-									}
-								}
-
-								// Refresh bank
-								if (window.refreshRhymeBank) window.refreshRhymeBank();
-								bankMap = registerBank();
-
-								btn.textContent = `✓ 已加载 ${chars.length} 字`;
-								btn.style.background = 'rgba(34, 211, 238, 0.2)';
-								progressBar.style.width = '100%';
-
-								const dictStatus = document.getElementById('dictStatus');
-								const dictStatusText = document.getElementById('dictStatusText');
-								const date = new Date();
-								dictStatus.style.display = 'block';
-								
-								// Build detailed status text with stats
-								let statusText = `📖 词库：${chars.length} 个唯一汉字（${sourceName}）`;
-								if (stats && stats.totalChars) {
-									statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
-								}
-								statusText += ` | ${date.toLocaleString('zh-CN')}`;
-								dictStatusText.textContent = statusText;
-
-								setTimeout(() => {
-						btn.innerHTML = `<i class="ri-book-2-line"></i> 已缓存 ${chars.length} 字`;
-									btn.style.background = '';
-									progressBar.style.display = 'none';
-								}, 1500);
-
-								resolve();
-							} catch (err) {
-								reject(err);
-							}
-						}
-
-						if (type === 'error') {
-							clearTimeout(timeout);
-							worker.terminate();
-							reject(new Error(message));
-						}
-					};
-
-					worker.onerror = (err) => {
-						clearTimeout(timeout);
-						worker.terminate();
-						reject(err);
-					};
-
-					// Send message to worker
-					worker.postMessage({
-						action: 'loadAndProcess',
-						payload: { dictSources }
-					});
+				worker.postMessage({
+					action: 'loadAndProcess',
+					payload: { dictSources: [{ name: '优化词库', url: './dict_optimized.json' }] }
 				});
+
 			} catch (err) {
 				console.error('词库加载失败:', err);
 				btn.textContent = `✗ ${err.message || '加载失败'}`;
 				btn.style.background = 'rgba(239, 68, 68, 0.2)';
-				progressBar?.style.display && (progressBar.style.display = 'none');
-
 				setTimeout(() => {
 					btn.textContent = originalText;
 					btn.disabled = false;
@@ -2781,33 +2661,13 @@
 				const dictStatusText = document.getElementById('dictStatusText');
 				
 				if (cachedTime) {
-					const cached = localStorage.getItem('ONLINE_DICT_CACHE');
-					if (cached) {
-						try {
-							const chars = JSON.parse(cached);
-							const date = new Date(Number(cachedTime));
-							const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '在线词库';
-							loadDictBtn.innerHTML = `✅️ 已缓存 ${chars.length} 字`;
-							loadDictBtn.title = '点击重新加载词库';
-							
-							dictStatus.style.display = 'block';
-							
-							// Try to load and display stats if available
-							let statusText = `📖 词库：${chars.length} 个唯一汉字（${source}）`;
-							try {
-								const statsStr = localStorage.getItem('ONLINE_DICT_STATS');
-								if (statsStr) {
-									const stats = JSON.parse(statsStr);
-									if (stats.totalChars > 0) {
-										statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
-									}
-								}
-							} catch (e) {}
-							
-							statusText += ` | ${date.toLocaleString('zh-CN')}`;
-							dictStatusText.textContent = statusText;
-						} catch (e) {}
-					}
+					const count = localStorage.getItem('ONLINE_DICT_COUNT') || '7000+';
+					const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '核心词库';
+					const date = new Date(Number(cachedTime));
+					
+					loadDictBtn.innerHTML = `✅ 已缓存 ${count} 字`;
+					dictStatus.style.display = 'block';
+					dictStatusText.textContent = `📖 词库：${count} 个汉字（${source}） | ${date.toLocaleString('zh-CN')}`;
 				}
 			};
 			
@@ -2873,16 +2733,13 @@
 				setOutputStatus(`pinyin-pro 已加载 (${url})，可点击生成。`);
 			});
 			
-			// 立即加载优化字典，加载完成后会触发动画
+			// 立即加载优化字典
 			loadDict();
 
-			// 如果 2 秒内还没加载完（可能网络问题），也强制显示内容，避免加载界面停留过久
-			setTimeout(() => {
-				if (window.startMainAnimations && document.getElementById('loadingSplash').style.visibility !== 'hidden') {
-					console.warn('字典加载超时，强制开启界面');
-					window.startMainAnimations();
-				}
-			}, 2000);
+			// 启动页面基础动画
+			if (window.startMainAnimations) {
+				window.startMainAnimations();
+			}
 		};
 
 		init();
