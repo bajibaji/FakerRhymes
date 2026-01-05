@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>中文押韵生成器</title>
+	<title>废壳韵脚生成器 v1.7.1 (Web) </title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<style>
@@ -755,7 +755,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.0</h1>
+			<h1>废壳韵脚生成器 v1.7.1</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -1011,6 +1011,7 @@
 		let currentInfos = [];
 		let currentDictResult = null; // 存储字典查询结果
 		let dict = null; // 优化字典
+		let dictSuffixMap = new Map(); // 新增：后缀索引映射
 		let locks = [];
 
 		// 平仄过滤函数：根据尾字声调过滤词语列表
@@ -1103,26 +1104,7 @@
 
 		let bloomFilter = new BloomFilter();
 
-		// 加载优化字典
-		const loadDict = async () => {
-			try {
-				const resp = await fetch('dict_optimized.json');
-				const text = await resp.text();
-				const rawDict = JSON.parse(text);
-				dict = {};
-				bloomFilter = new BloomFilter(Object.keys(rawDict).length * 10, 3);
-				for (const [key, value] of Object.entries(rawDict)) {
-					const encoded = encodeKey(key);
-					dict[encoded] = value;
-					bloomFilter.add(encoded);
-				}
-			devLog('字典加载成功,共', Object.keys(dict).length, '条');
-		} catch(e) {
-			console.error('字典加载失败:', e);
-		}
-	};
-
-	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
+		const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
 	// 将键统一转成 v 形式，并生成 v/u 双版本，兼容词典中可能用 u 表示 ü 的情况
 	const buildKeyVariants = (key) => {
@@ -1263,6 +1245,7 @@
 		// 从字典查询拼音组合对应的词组（新算法）
 		// 使用最后两个字的韵脚为查询条件，返回所有相关匹配
 		const queryDict = (infos, looseness) => {
+			const startTime = performance.now();
 			if (!infos || infos.length === 0) return null;
 			
 			// 修改：不再强制只取最后两个字，而是根据输入长度决定
@@ -1313,8 +1296,17 @@
 			};
 			
 			const queryKeys = generateQueryKeys(validInfos);
+			console.log(`[Performance] queryKeys count: ${queryKeys.length}`);
 			const queryVariantSet = new Set();
-			queryKeys.forEach(k => {
+			
+			// 限制查询键的数量，防止组合爆炸
+			const maxQueryKeys = 500;
+			const limitedQueryKeys = queryKeys.slice(0, maxQueryKeys);
+			if (queryKeys.length > maxQueryKeys) {
+				console.warn(`[Performance] Query keys truncated from ${queryKeys.length} to ${maxQueryKeys}`);
+			}
+
+			limitedQueryKeys.forEach(k => {
 				buildKeyVariants(k).forEach(v => {
 					const encoded = encodeKey(v);
 					if (bloomFilter.mightContain(encoded)) {
@@ -1322,56 +1314,60 @@
 					}
 				});
 			});
+			console.log(`[Performance] queryVariantSet count after Bloom: ${queryVariantSet.size}`);
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
 			const sourceLength = infos.length;
+
+			const addPhrase = (phrase) => {
+				const phraseLen = Array.from(phrase).length;
+				if (!matchedByWordCount[phraseLen]) {
+					matchedByWordCount[phraseLen] = new Set();
+				}
+				matchedByWordCount[phraseLen].add(phrase);
+			};
 			
 			// 遍历查询变体集而不是整个字典
 			if (dict) {
+				const startExact = performance.now();
 				for (const qk of queryVariantSet) {
 					// 直接查询 encoded key
 					const candidates = dict[qk];
 					if (candidates && Array.isArray(candidates)) {
 						for (const phrase of candidates) {
-							const phraseLen = Array.from(phrase).length;
-							if (!matchedByWordCount[phraseLen]) {
-								matchedByWordCount[phraseLen] = [];
-							}
-							if (!matchedByWordCount[phraseLen].includes(phrase)) {
-								matchedByWordCount[phraseLen].push(phrase);
-							}
+							addPhrase(phrase);
 						}
 					}
 				}
+				console.log(`[Performance] Exact match search took: ${(performance.now() - startExact).toFixed(2)}ms`);
 				
 				// 还需要处理以 qk 结尾的键 (例如 query 是 "an4_u4", 字典中有 "i1_an4_u4")
 				// 由于我们现在使用了 Bloom Filter 和 encoded keys，这里的逻辑需要保持兼容
-				// 如果 Bloom Filter 只是为了过滤不存在的 key，那么前缀匹配仍然需要某种方式
-				// 不过原逻辑是: buildKeyVariants(dictKey).some(...) 
-				// 现在的 dict 是以 encodedKey 为键的
 				
-				// 优化：只有当 queryVariantSet 不为空时才进行更深层次的搜索，或者改变数据结构以支持后缀查询
-				// 为了保持功能，我们保留对 dict 的遍历，但使用 Bloom Filter 加速
-				for (const [dictKey, candidates] of Object.entries(dict)) {
-					const hasMatch = Array.from(queryVariantSet).some(qk => {
-						return dictKey === qk || dictKey.endsWith(qk);
-					});
-					
-					if (!hasMatch) continue;
-					if (candidates && Array.isArray(candidates)) {
-						for (const phrase of candidates) {
-							const phraseLen = Array.from(phrase).length;
-							if (!matchedByWordCount[phraseLen]) {
-								matchedByWordCount[phraseLen] = [];
-							}
-							if (!matchedByWordCount[phraseLen].includes(phrase)) {
-								matchedByWordCount[phraseLen].push(phrase);
-							}
+				// 优化：利用后缀索引 dictSuffixMap 直接获取匹配的键，避免全量遍历字典
+				const startSuffix = performance.now();
+				const matchedKeys = new Set();
+				for (const qk of queryVariantSet) {
+					const keysWithSuffix = dictSuffixMap.get(qk);
+					if (keysWithSuffix) {
+						for (const k of keysWithSuffix) {
+							matchedKeys.add(k);
 						}
 					}
 				}
+
+				for (const mk of matchedKeys) {
+					const candidates = dict[mk];
+					if (candidates && Array.isArray(candidates)) {
+						for (const phrase of candidates) {
+							addPhrase(phrase);
+						}
+					}
+				}
+				console.log(`[Performance] Suffix match search (indexed) took: ${(performance.now() - startSuffix).toFixed(2)}ms, matched keys: ${matchedKeys.size}`);
 			}
+			console.log(`[Performance] Total queryDict took: ${(performance.now() - startTime).toFixed(2)}ms`);
 			
 			// 也从自定义词库中查询
 			try {
@@ -1388,17 +1384,11 @@
 													const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
 													const phraseKey = phraseKeyParts.join('_');
 													const phraseVariants = buildKeyVariants(phraseKey);
-													const hit = phraseVariants.some(v => queryVariantSet.has(v));
+													const hit = phraseVariants.some(v => queryVariantSet.has(encodeKey(v)));
 									
 													if (hit) {
-										const phraseLen = Array.from(phrase).length;
-										if (!matchedByWordCount[phraseLen]) {
-											matchedByWordCount[phraseLen] = [];
-										}
-										if (!matchedByWordCount[phraseLen].includes(phrase)) {
-											matchedByWordCount[phraseLen].push(phrase);
-										}
-									}
+														addPhrase(phrase);
+													}
 								}
 							}
 						}
@@ -1418,13 +1408,13 @@
 		// 先添加相同字数的匹配
 		const sameLengthCandidates = sortedLengths.filter(len => len === sourceLength);
 		for (const len of sameLengthCandidates) {
-			sameLengthResults.push(...matchedByWordCount[len]);
+			sameLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		
 		// 收集少一字的匹配
 		const targetLess = sourceLength - 1;
 		if (targetLess >= 1 && matchedByWordCount[targetLess]) {
-			lessLengthResults.push(...matchedByWordCount[targetLess]);
+			lessLengthResults.push(...Array.from(matchedByWordCount[targetLess]));
 		}
 		
 		// 如果没有相同字数的匹配，且源字数大于2，尝试降级查询
@@ -1433,10 +1423,34 @@
 			while (currentLength >= 2 && sameLengthResults.length === 0) {
 				// 取末尾 currentLength 个字重新查询
 				const shorterInfos = infos.slice(-currentLength);
-				const shorterResult = queryDict(shorterInfos, looseness);
 				
-				if (shorterResult && shorterResult.sameLength && shorterResult.sameLength.length > 0) {
-					sameLengthResults.push(...shorterResult.sameLength);
+				// 优化：直接在内部执行简化版的查询，避免递归带来的重复计算
+				const shorterTier = getLoosenessTier(looseness);
+				const shorterAllowToneRelax = shorterTier >= 2;
+				
+				const shorterKeys = generateQueryKeys(shorterInfos);
+				const shorterVariantSet = new Set();
+				shorterKeys.forEach(k => {
+					buildKeyVariants(k).forEach(v => {
+						const encoded = encodeKey(v);
+						if (bloomFilter.mightContain(encoded)) {
+							shorterVariantSet.add(encoded);
+						}
+					});
+				});
+
+				for (const qk of shorterVariantSet) {
+					const candidates = dict[qk];
+					if (candidates && Array.isArray(candidates)) {
+						for (const phrase of candidates) {
+							if (!sameLengthResults.includes(phrase)) {
+								sameLengthResults.push(phrase);
+							}
+						}
+					}
+				}
+				
+				if (sameLengthResults.length > 0) {
 					devLog(`降级查询成功：从 ${sourceLength} 字降到 ${currentLength} 字`);
 					break;
 				}
@@ -1448,7 +1462,7 @@
 		// 然后添加所有字数更多的匹配
 		const moreLengthCandidates = sortedLengths.filter(len => len > sourceLength);
 		for (const len of moreLengthCandidates) {
-			moreLengthResults.push(...matchedByWordCount[len]);
+			moreLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		
 		return {
@@ -2291,6 +2305,21 @@
 									for (const key of Object.keys(dict)) {
 										bloomFilter.add(key);
 									}
+
+									// Handle suffix map from worker
+									if (data.suffixMap) {
+										dictSuffixMap = new Map(Object.entries(data.suffixMap));
+									} else {
+										// Rebuild if not provided
+										dictSuffixMap = new Map();
+										for (const encoded of Object.keys(dict)) {
+											for (let i = 0; i < encoded.length; i += 2) {
+												const suffix = encoded.slice(i);
+												if (!dictSuffixMap.has(suffix)) dictSuffixMap.set(suffix, []);
+												dictSuffixMap.get(suffix).push(encoded);
+											}
+										}
+									}
 								}
 
 								// Refresh bank
@@ -2694,9 +2723,6 @@
 				bankMap = registerBank();
 				setOutputStatus(`pinyin-pro 已加载 (${url})，可点击生成。`);
 			});
-			
-			// 加载优化字典
-			loadDict();
 		};
 
 		init();
