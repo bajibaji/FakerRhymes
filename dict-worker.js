@@ -27,8 +27,6 @@ function encodeKey(key) {
 
 function decodeKey(encodedKey) {
   if (!encodedKey) return encodedKey;
-  // This is trickier because encoded parts are not separated by underscores in the most compact form
-  // But our current keys are like "i1_an4", let's assume we want to compress it to "w1h4"
   let decoded = [];
   for (let i = 0; i < encodedKey.length; i += 2) {
     const code = encodedKey[i];
@@ -36,6 +34,59 @@ function decodeKey(encodedKey) {
     decoded.push((codeToFinal[code] || code) + tone);
   }
   return decoded.join('_');
+}
+
+// IndexedDB helpers
+const DB_NAME = 'FakerRhymesDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'dictionary';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function saveToDB(data) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    
+    // Clear existing data
+    store.clear();
+    
+    // Add data in chunks to avoid blocking
+    const keys = Object.keys(data);
+    let i = 0;
+    const chunkSize = 1000;
+    
+    function addNextChunk() {
+      const limit = Math.min(i + chunkSize, keys.length);
+      for (; i < limit; i++) {
+        store.put(data[keys[i]], keys[i]);
+      }
+      
+      if (i < keys.length) {
+        setTimeout(addNextChunk, 0);
+      } else {
+        resolve();
+      }
+    }
+    
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = (e) => reject(e.target.error);
+    
+    addNextChunk();
+  });
 }
 
 self.onmessage = async function(event) {
@@ -47,7 +98,6 @@ self.onmessage = async function(event) {
       
       for (const source of dictSources) {
         try {
-          // Report progress
           self.postMessage({
             type: 'progress',
             message: `加载中: ${source.name}`
@@ -62,7 +112,6 @@ self.onmessage = async function(event) {
             throw new Error('HTTP ' + response.status);
           }
 
-          // Stream large files in chunks for better progress reporting
           const contentLength = response.headers.get('content-length');
           const total = parseInt(contentLength, 10);
           const reader = response.body.getReader();
@@ -102,7 +151,7 @@ self.onmessage = async function(event) {
 
           const data = JSON.parse(jsonStr);
           
-          // Re-encode keys for more efficient storage if needed
+          // Re-encode keys
           const optimizedDict = {};
           for (const [key, value] of Object.entries(data)) {
             optimizedDict[encodeKey(key)] = value;
@@ -111,14 +160,21 @@ self.onmessage = async function(event) {
           const { chars, stats } = processDict(optimizedDict);
 
           if (chars && chars.length > 0) {
+            // Save to IndexedDB to reduce memory pressure in main thread
+            self.postMessage({
+              type: 'progress',
+              message: `正在存储到本地...`
+            });
+            await saveToDB(optimizedDict);
+
             self.postMessage({
               type: 'success',
               data: {
                 chars,
-                optimizedDict, // Send back encoded dictionary
+                // optimizedDict, // We no longer send the huge object back to main thread
                 sourceName: source.name,
                 count: chars.length,
-                stats  // 传递详细统计信息
+                stats
               }
             });
             return;
@@ -145,26 +201,19 @@ self.onmessage = async function(event) {
   }
 };
 
-/**
- * Process dictionary data and extract Chinese characters
- * Supports multiple dictionary formats
- * Returns { uniqueChars, stats } for better visibility
- */
 function processDict(data) {
   const chars = new Set();
   let stats = {
     totalStrings: 0,
-    totalChars: 0,        // 汉字总数（计重复）
-    uniqueChars: 0,       // 去重后的唯一汉字数
-    categories: 0         // 分类数量（如果是对象格式）
+    totalChars: 0,
+    uniqueChars: 0,
+    categories: 0
   };
 
   if (Array.isArray(data)) {
-    // Array of strings or objects
     stats.categories = 1;
     data.forEach((item, idx) => {
       if (idx % 1000 === 0) {
-        // Report progress every 1000 items
         self.postMessage({
           type: 'parsing',
           progress: Math.round((idx / data.length) * 100)
@@ -191,7 +240,6 @@ function processDict(data) {
       }
     });
   } else if (data && typeof data === 'object') {
-    // Object with character arrays by rhyme/key
     const entries = Object.entries(data);
     stats.categories = entries.length;
     
