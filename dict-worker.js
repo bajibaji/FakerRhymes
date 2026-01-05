@@ -57,46 +57,55 @@ function openDB() {
 
 async function saveToDB(data) {
   const db = await openDB();
+  const keys = Object.keys(data);
+  const total = keys.length;
+  let i = 0;
+  const chunkSize = 2000; // Reduced chunk size for better responsiveness
+
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    
-    // Clear existing data
-    store.clear();
-    
-    // Add data in larger chunks to speed up writing
-    const keys = Object.keys(data);
-    let i = 0;
-    const chunkSize = 5000; // Increased chunk size for faster processing
-    
-    function addNextChunk() {
-      try {
-        const limit = Math.min(i + chunkSize, keys.length);
-        for (; i < limit; i++) {
-          store.put(data[keys[i]], keys[i]);
-        }
-        
-        const progress = Math.round((i / keys.length) * 100);
+    function processNextBatch() {
+      // Create a new transaction for each batch to avoid long-running transaction issues
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      
+      const limit = Math.min(i + chunkSize, total);
+      for (; i < limit; i++) {
+        store.put(data[keys[i]], keys[i]);
+      }
+
+      transaction.oncomplete = () => {
+        const progress = Math.round((i / total) * 100);
         self.postMessage({
           type: 'parsing',
           progress: progress,
           message: `正在存储到本地: ${progress}%`
         });
 
-        if (i < keys.length) {
-          setTimeout(addNextChunk, 0);
+        if (i < total) {
+          // Use a small delay to allow message passing and avoid event loop starvation
+          setTimeout(processNextBatch, 10);
         } else {
-          // Transaction will auto-commit
+          resolve();
         }
-      } catch (err) {
-        reject(err);
-      }
+      };
+
+      transaction.onerror = (e) => {
+        console.error('IndexedDB transaction error:', e.target.error);
+        reject(e.target.error);
+      };
+
+      // In case the transaction is aborted
+      transaction.onabort = (e) => {
+        console.error('IndexedDB transaction aborted:', e.target.error);
+        reject(new Error('Transaction aborted'));
+      };
     }
-    
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = (e) => reject(e.target.error);
-    
-    addNextChunk();
+
+    // Clear the store before starting
+    const clearTransaction = db.transaction([STORE_NAME], 'readwrite');
+    clearTransaction.objectStore(STORE_NAME).clear();
+    clearTransaction.oncomplete = () => processNextBatch();
+    clearTransaction.onerror = (e) => reject(e.target.error);
   });
 }
 
@@ -145,47 +154,54 @@ self.onmessage = async function(event) {
             }
           }
 
-          const chunksAll = new Uint8Array(receivedLength);
-          let position = 0;
-          for (const chunk of chunks) {
-            chunksAll.set(chunk, position);
-            position += chunk.length;
-          }
-
-          const decoder = new TextDecoder();
-          const jsonStr = decoder.decode(chunksAll);
-          
           self.postMessage({
             type: 'progress',
-            message: `解析${source.name}`
+            message: `解析${source.name}...`
           });
 
-          const data = JSON.parse(jsonStr);
+          // Use Response.json() for potentially faster native parsing
+          const data = await response.json();
           
-          // Re-encode keys
+          // Re-encode keys and extract unique characters
+          const uniqueChars = new Set();
           const optimizedDict = {};
-          for (const [key, value] of Object.entries(data)) {
-            optimizedDict[encodeKey(key)] = value;
+          const keys = Object.keys(data);
+          
+          // Optimized processing loop with larger yield steps
+          for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            const value = data[key];
+            const encoded = encodeKey(key);
+            optimizedDict[encoded] = value;
+            
+            if (Array.isArray(value)) {
+              for (let j = 0; j < value.length; j++) {
+                const word = value[j];
+                for (let k = 0; k < word.length; k++) {
+                  const char = word[k];
+                  if (char >= '\u4e00' && char <= '\u9fa5') uniqueChars.add(char);
+                }
+              }
+            }
+            
+            if (i % 20000 === 0) {
+              self.postMessage({
+                type: 'parsing',
+                progress: Math.round((i / keys.length) * 100)
+              });
+              await new Promise(r => setTimeout(r, 0));
+            }
           }
 
-          const { chars, stats } = processDict(optimizedDict);
-
-          if (chars && chars.length > 0) {
-            // Save to IndexedDB to reduce memory pressure in main thread
-            self.postMessage({
-              type: 'progress',
-              message: `正在存储到本地...`
-            });
+          if (uniqueChars.size > 0) {
             await saveToDB(optimizedDict);
 
             self.postMessage({
               type: 'success',
               data: {
-                chars,
-                // optimizedDict, // We no longer send the huge object back to main thread
+                chars: Array.from(uniqueChars),
                 sourceName: source.name,
-                count: chars.length,
-                stats
+                count: uniqueChars.size
               }
             });
             return;
