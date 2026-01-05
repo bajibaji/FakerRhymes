@@ -1,6 +1,6 @@
 /**
  * Web Worker for background dictionary loading and processing
- * This runs in a separate thread to avoid blocking the main UI thread
+ * Optimized for mobile: Fast loading, skip heavy character extraction
  */
 
 // Final to short code mapping
@@ -10,8 +10,6 @@ const finalToCode = {
   'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
   'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'B', 'üan': 'C', 'ün': 'D'
 };
-
-const codeToFinal = Object.fromEntries(Object.entries(finalToCode).map(([k, v]) => [v, k]));
 
 function encodeKey(key) {
   if (!key) return key;
@@ -25,18 +23,6 @@ function encodeKey(key) {
   }).join('');
 }
 
-function decodeKey(encodedKey) {
-  if (!encodedKey) return encodedKey;
-  let decoded = [];
-  for (let i = 0; i < encodedKey.length; i += 2) {
-    const code = encodedKey[i];
-    const tone = encodedKey[i + 1];
-    decoded.push((codeToFinal[code] || code) + tone);
-  }
-  return decoded.join('_');
-}
-
-// IndexedDB helpers
 const DB_NAME = 'FakerRhymesDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'dictionary';
@@ -55,12 +41,15 @@ function openDB() {
   });
 }
 
-async function saveToDB(data) {
+/**
+ * Saves data chunks to IndexedDB
+ */
+async function saveToDB(data, startProgress = 0) {
   const db = await openDB();
   const keys = Object.keys(data);
   const total = keys.length;
   let i = 0;
-  const chunkSize = 5000; // 增大分片以减少事务开销
+  const chunkSize = 8000; // Increased chunk size for faster storage
 
   return new Promise((resolve, reject) => {
     function processNextBatch() {
@@ -74,29 +63,26 @@ async function saveToDB(data) {
         }
 
         transaction.oncomplete = () => {
-          const progress = Math.round((i / total) * 100);
+          const totalProgress = startProgress + Math.round((i / total) * (100 - startProgress));
+          
           self.postMessage({
             type: 'parsing',
-            progress: progress,
-            message: `正在存储: ${progress}%`
+            progress: totalProgress,
+            message: `正在存储: ${totalProgress}%`
           });
 
           if (i < total) {
-            // 手机端关键：给 UI 线程留出更多喘息时间
-            setTimeout(processNextBatch, 50);
+            // Minimal delay for maximum speed
+            setTimeout(processNextBatch, 0); 
           } else {
             resolve();
           }
         };
-
         transaction.onerror = (e) => reject(e.target.error);
-        transaction.onabort = (e) => reject(new Error('Transaction aborted'));
       } catch (err) {
         reject(err);
       }
     }
-
-    // 清理逻辑移出此处，在主线程控制
     processNextBatch();
   });
 }
@@ -107,75 +93,54 @@ self.onmessage = async function(event) {
   if (action === 'loadAndProcess') {
     try {
       const { dictSources } = payload;
-      
       for (const source of dictSources) {
         try {
+          self.postMessage({ type: 'progress', message: '正在加载资源...' });
+          
           const response = await fetch(source.url);
           if (!response.ok) throw new Error('HTTP ' + response.status);
 
-          // 核心优化：使用流式解析减少内存占用
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-          let data = null;
-
-          self.postMessage({ type: 'progress', message: '正在获取词库...' });
-
-          // 如果文件不是特别大，原生 JSON.parse 依然是最快的
-          // 这里我们采用渐进式读取
-          const chunks = [];
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-          }
+          let jsonStr = await response.text();
           
-          const blob = new Blob(chunks);
-          const jsonStr = await blob.text();
-          data = JSON.parse(jsonStr);
+          self.postMessage({ type: 'progress', message: '资源加载完成，极速解析中...' });
+          let data = JSON.parse(jsonStr);
+          jsonStr = null; 
           
-          console.log('JSON 解析完成');
-          
-          // 优化处理循环
-          const uniqueChars = new Set();
-          const optimizedDict = {};
           const keys = Object.keys(data);
+          const totalKeys = keys.length;
           
-          for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
-            const value = data[key];
-            const encoded = encodeKey(key);
-            optimizedDict[encoded] = value;
-            
-            if (Array.isArray(value)) {
-              for (const word of value) {
-                for (const char of word) {
-                  if (char >= '\u4e00' && char <= '\u9fa5') uniqueChars.add(char);
-                }
-              }
+          const optimizedDict = {};
+          
+          // FAST TRACK: Skip unique character extraction completely
+          // Processing in batches but without await inside the inner loop for extreme speed
+          const batchSize = 10000;
+          for (let i = 0; i < totalKeys; i += batchSize) {
+            const end = Math.min(i + batchSize, totalKeys);
+            for (let j = i; j < end; j++) {
+              const key = keys[j];
+              optimizedDict[encodeKey(key)] = data[key];
             }
             
-            if (i % 20000 === 0) {
-              self.postMessage({
-                type: 'parsing',
-                progress: Math.round((i / keys.length) * 50) // 映射到 0-50%
-              });
-              await new Promise(r => setTimeout(r, 0));
-            }
-          }
-
-          if (uniqueChars.size > 0) {
-            await saveToDB(optimizedDict);
             self.postMessage({
-              type: 'success',
-              data: {
-                chars: [], // 不再传递巨大数组
-                sourceName: source.name,
-                count: uniqueChars.size
-              }
+              type: 'parsing',
+              progress: Math.round((i / totalKeys) * 15)
             });
-            return;
           }
+          
+          data = null; 
+          console.log('Optimized dictionary ready, saving to DB...');
+          // Mapping DB storage to 20-100%
+          await saveToDB(optimizedDict, 20);
+          
+          self.postMessage({
+            type: 'success',
+            data: {
+              chars: [], 
+              sourceName: source.name,
+              count: totalKeys // Just use key count as estimate
+            }
+          });
+
         } catch (err) {
           self.postMessage({ type: 'error', message: err.message });
         }

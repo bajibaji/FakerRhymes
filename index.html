@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>废壳韵脚生成器 v1.7.1 </title>
+	<title>废壳韵脚生成器 v1.7.2 </title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<style>
@@ -801,7 +801,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.1<span style="font-size: 0.5em;">[网页版]</span></h1>
+			<h1>废壳韵脚生成器 v1.7.2<span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -858,7 +858,7 @@
 					</div>
 				</div>
 
-				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*使用前请先加载词库*</div>
+				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*第一次使用前请先加载词库*</div>
 				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
 				<div class="hint">- 越宽松需要查询的时间越长，请耐心等待</div>
@@ -1204,78 +1204,56 @@
 
 		let bloomFilter = new BloomFilter();
 
+		// 全局词库对象，用于快速内存查询
+		let globalDictData = null;
+
 		// 加载优化字典
 		const loadDict = async () => {
-			// 如果已经在加载了，直接返回
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
 
 			try {
-				// 1. 极速初始化：优先检查本地缓存
-				const allKeys = await getAllKeysFromDB();
-				if (allKeys && allKeys.length > 0) {
-					devLog('从 IndexedDB 发现缓存词库，开始极速索引重建');
-					bloomFilter = new BloomFilter(allKeys.length * 10, 3);
-					
-					// 极致优化：主线程重建索引使用更大的批次和 requestIdleCallback
-					const buildBatch = (startIndex) => {
-						const batchSize = 15000; // 进一步增加批次
-						const endIndex = Math.min(startIndex + batchSize, allKeys.length);
-						for (let i = startIndex; i < endIndex; i++) {
-							bloomFilter.add(allKeys[i]);
-						}
-						if (endIndex < allKeys.length) {
-							if (window.requestIdleCallback) {
-								requestIdleCallback(() => buildBatch(endIndex));
-							} else {
-								setTimeout(() => buildBatch(endIndex), 0);
-							}
-						} else {
-							window.dictLoaded = true;
-							devLog('Bloom Filter 索引重建耗时:', (performance.now() - startTime).toFixed(2), 'ms');
-						}
-					};
-					const startTime = performance.now();
-					buildBatch(0);
-					window.isDictLoading = false;
-					return;
+				// 极致优化：不再写入 IndexedDB（写入太慢），直接将整个 JSON 载入内存
+				// 手机端现代浏览器处理 40MB 的对象其实很快，瓶颈在于 IndexedDB 序列化
+				devLog('开始极速载入词库...');
+				const startTime = performance.now();
+				
+				const response = await fetch('./dict_optimized.json');
+				if (!response.ok) throw new Error('HTTP ' + response.status);
+				
+				const data = await response.json();
+				
+				// 预处理 Key
+				globalDictData = new Map();
+				for (const key in data) {
+					globalDictData.set(encodeKey(key), data[key]);
 				}
+				
+				window.dictLoaded = true;
+				window.isDictLoading = false;
+				devLog('词库全量载入内存耗时:', (performance.now() - startTime).toFixed(2), 'ms');
+				
+				// 更新 UI
+				const btn = document.getElementById('loadDictBtn');
+				if (btn) btn.innerHTML = `✅ 已就绪 (${globalDictData.size} 组)`;
+				
+				const warning = document.getElementById('dictWarning');
+				if (warning) warning.style.display = 'none';
 
-				// 2. 首次启动：使用原生流式解析
-				if (typeof Worker !== 'undefined') {
-					const worker = new Worker('./dict-worker.js');
-					worker.onmessage = (event) => {
-						const { type, message, data, progress } = event.data;
-						if (type === 'progress') {
-							// updateSplash(message, percent ? Math.round(percent * 0.8) : undefined);
-						} else if (type === 'parsing') {
-							// updateSplash('正在解析数据...', 80 + Math.round(event.data.progress * 0.1));
-						} else if (type === 'success') {
-							// updateSplash('词库加载成功', 100);
-							const startTime = performance.now();
-							getAllKeysFromDB().then(keys => {
-								bloomFilter = new BloomFilter(keys.length * 10, 3);
-								keys.forEach(k => bloomFilter.add(k));
-								window.dictLoaded = true;
-								devLog('Worker 成功后 Bloom Filter 重建耗时:', (performance.now() - startTime).toFixed(2), 'ms');
-								worker.terminate();
-							});
-						} else if (type === 'error') {
-							console.error('后台加载失败:', message);
-							worker.terminate();
-						}
-					};
-					worker.postMessage({
-						action: 'loadAndProcess',
-						payload: { dictSources: [{ name: '核心词库', url: './dict_optimized.json' }] }
-					});
-				}
-			} catch(e) {
-				console.error('加载流程异常:', e);
-			} finally {
+			} catch (e) {
+				console.error('极速载入失败:', e);
 				window.isDictLoading = false;
 			}
 		};
+
+		// 极速获取数据函数
+		async function getFromDB(key) {
+			// 优先从内存 Map 中获取，这是毫秒级的
+			if (globalDictData && globalDictData.has(key)) {
+				return globalDictData.get(key);
+			}
+			return null;
+		}
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
@@ -1430,6 +1408,12 @@
 		const queryDict = async (infos, looseness) => {
 			if (!infos || infos.length === 0) return null;
 			
+			// 1. 核心极速逻辑：如果 Bloom Filter 还没准备好，尝试触发懒加载
+			if (!window.dictLoaded && !window.isDictLoading) {
+				console.log('触发词库自动挂载...');
+				loadDict();
+			}
+
 			// 修改：不再强制只取最后两个字，而是根据输入长度决定
 			// 用户要求：查询条件跟生成结果一样，字数由用户输入决定
 			let queryInfos = infos;
@@ -1482,9 +1466,8 @@
 			queryKeys.forEach(k => {
 				buildKeyVariants(k).forEach(v => {
 					const encoded = encodeKey(v);
-					if (bloomFilter.mightContain(encoded)) {
-						queryVariantSet.add(encoded);
-					}
+					// 内存查询模式下，不需要 Bloom Filter
+					queryVariantSet.add(encoded);
 				});
 			});
 			
@@ -1492,8 +1475,7 @@
 			const matchedByWordCount = {};
 			const sourceLength = infos.length;
 			
-			// 优化方案：移动端优先，只使用精准哈希查询，彻底移除全字典扫描
-			// 从 IndexedDB 中逐个查询命中的变体
+			// 优化方案：移动端优先，只使用精准哈希查询
 			for (const qk of queryVariantSet) {
 				const candidates = await getFromDB(qk);
 				if (candidates && Array.isArray(candidates)) {
@@ -1507,6 +1489,11 @@
 						}
 					}
 				}
+			}
+
+			// 如果内存中查不到，且此时词库还没加载，自动触发一次极速加载
+			if (Object.keys(matchedByWordCount).length === 0 && !window.dictLoaded) {
+				loadDict();
 			}
 			
 			// 也从自定义词库中查询
