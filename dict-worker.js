@@ -64,6 +64,7 @@ async function saveToDB(data) {
   const chunkSize = 2000; // Reduced chunk size for better responsiveness
 
   return new Promise((resolve, reject) => {
+<<<<<<< HEAD
     function processNextBatch() {
       // Create a new transaction for each batch to avoid long-running transaction issues
       const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -100,6 +101,30 @@ async function saveToDB(data) {
         console.error('IndexedDB transaction aborted:', e.target.error);
         reject(new Error('Transaction aborted'));
       };
+=======
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    
+    // Clear existing data
+    store.clear();
+    
+    // Add data in chunks to avoid blocking
+    const keys = Object.keys(data);
+    let i = 0;
+    const chunkSize = 1000;
+    
+    function addNextChunk() {
+      const limit = Math.min(i + chunkSize, keys.length);
+      for (; i < limit; i++) {
+        store.put(data[keys[i]], keys[i]);
+      }
+      
+      if (i < keys.length) {
+        setTimeout(addNextChunk, 0);
+      } else {
+        resolve();
+      }
+>>>>>>> parent of 2fb5f8f (4)
     }
 
     // Clear the store before starting

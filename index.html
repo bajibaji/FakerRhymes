@@ -1166,12 +1166,23 @@
 				// 2. 首次启动：使用原生流式解析
 				if (typeof Worker !== 'undefined') {
 					const worker = new Worker('./dict-worker.js');
+<<<<<<< HEAD
 					worker.onmessage = async (event) => {
 						const { type, message } = event.data;
 						if (type === 'success') {
 							const keys = await getAllKeysFromDB();
 							bloomFilter = new BloomFilter(keys.length * 10, 3);
 							keys.forEach(k => bloomFilter.add(k));
+=======
+					worker.onmessage = (event) => {
+						const { type, message, data, percent } = event.data;
+						if (type === 'progress') {
+							updateSplash(message, percent ? Math.round(percent * 0.8) : undefined);
+						} else if (type === 'parsing') {
+							updateSplash('正在解析数据...', 80 + Math.round(event.data.progress * 0.1));
+						} else if (type === 'success') {
+							updateSplash('词库加载成功', 100);
+>>>>>>> parent of 2fb5f8f (4)
 							window.dictLoaded = true;
 							worker.terminate();
 						} else if (type === 'error') {
@@ -1311,6 +1322,7 @@
 			{ name: '油求辙', finals: ['ou', 'iu', 'iou'] }
 		];
 
+<<<<<<< HEAD
 		const coreRhymes = ['a', 'o', 'e', 'i', 'u', 'v', 'ai', 'ei', 'ao', 'ou', 'an', 'en', 'ang', 'eng', 'ong'];
 
 		const finalToChunk = (fin) => {
@@ -1321,6 +1333,8 @@
 			return 'chunk_other';
 		};
 
+=======
+>>>>>>> parent of 2fb5f8f (4)
 		// 松紧分级：
 		// 0（严格）：同韵同调（区分平翘舌、前后鼻音）
 		// 1（中等）：同调，但韵母放宽（不分平翘舌，不分前后鼻音）
@@ -1405,20 +1419,6 @@
 			queryKeys.forEach(k => {
 				buildKeyVariants(k).forEach(v => queryVariantSet.add(v));
 			});
-
-			// 特殊处理：如果没有任何变体通过 Bloom Filter，尝试只查询末尾字
-			if (queryVariantSet.size === 0 && validInfos.length > 1) {
-				const lastInfo = [validInfos[validInfos.length - 1]];
-				const lastKeys = generateQueryKeys(lastInfo);
-				lastKeys.forEach(k => {
-					buildKeyVariants(k).forEach(v => {
-						const encoded = encodeKey(v);
-						if (bloomFilter.mightContain(encoded)) {
-							queryVariantSet.add(encoded);
-						}
-					});
-				});
-			}
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
@@ -1432,11 +1432,6 @@
 				if (candidates && Array.isArray(candidates)) {
 					for (const phrase of candidates) {
 						const phraseLen = Array.from(phrase).length;
-						// 如果是单字查询结果，只保留匹配原句长度的词条（作为回退）
-						if (validInfos.length > 1 && queryKeys.length > 0 && !queryKeys.some(qk2 => encodeKey(qk2) === qk)) {
-							if (phraseLen !== sourceLength) continue;
-						}
-						
 						if (!matchedByWordCount[phraseLen]) {
 							matchedByWordCount[phraseLen] = [];
 						}
