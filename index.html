@@ -818,7 +818,6 @@
 					<div style="display: flex; gap: 10px; flex-wrap: wrap;">
 						<button class="btn" id="go">生成押韵</button>
 						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
-						<button class="btn ghost small" id="clearDictBtn" title="清理本地缓存的词库数据" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><i class="ri-delete-bin-line"></i> 清理缓存</button>
 					</div>
 					<label class="small" style="margin-top: 10px;">韵脚宽松度</label>
 					<div class="segmented-control" id="loosenessSelector">
@@ -900,6 +899,10 @@
 		</section>
 
 		<div class="footer">词库基于雾凇拼音词库以及中华新华字典数据库以及清华大学开放中文词库，查询算法基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
+
+		<div style="text-align: center; margin-bottom: 20px;">
+			<button class="btn ghost small" id="clearDictBtn" title="清理本地缓存的词库数据" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><i class="ri-delete-bin-line"></i> 清理缓存</button>
+		</div>
 	</div>
 
 	<!-- AI Settings Modal -->
