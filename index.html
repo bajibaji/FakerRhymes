@@ -1092,15 +1092,13 @@
 			});
 		}
 
+		// 极速获取数据函数
 		async function getFromDB(key) {
-			const db = await openDB();
-			return new Promise((resolve, reject) => {
-				const transaction = db.transaction([STORE_NAME], 'readonly');
-				const store = transaction.objectStore(STORE_NAME);
-				const request = store.get(key);
-				request.onsuccess = (e) => resolve(e.target.result);
-				request.onerror = (e) => reject(e.target.error);
-			});
+			// 优先从内存 Map 中获取，这是毫秒级的
+			if (globalDictData && globalDictData.has(key)) {
+				return globalDictData.get(key);
+			}
+			return null;
 		}
 
 		async function getAllKeysFromDB() {
@@ -1225,10 +1223,37 @@
 				
 				// 预处理 Key
 				globalDictData = new Map();
+				suffixIndex = new Map(); // 重置后缀索引
+				
 				for (const key in data) {
-					globalDictData.set(encodeKey(key), data[key]);
+					const encoded = encodeKey(key);
+					globalDictData.set(encoded, data[key]);
+					
+					// 修改索引逻辑：使用末尾 1 个编码字符作为索引键（通常是韵母编码+声调，共2位）
+					// e.g. "废壳" -> "ei4_e2" -> encodeKey -> "e4v2"
+					// 末尾字是 "v2"，长度为 2
+					if (encoded.length >= 2) {
+						const suffix = encoded.slice(-2);
+						if (!suffixIndex.has(suffix)) suffixIndex.set(suffix, []);
+						suffixIndex.get(suffix).push(encoded);
+					}
 				}
 				
+				// 🔍 DEBUG: 索引构建验证
+				console.log('=== DEBUG: 索引构建验证 ===');
+				console.log('Total entries:', globalDictData.size);
+				console.log('Total suffixIndex keys:', suffixIndex.size);
+				if (suffixIndex.size > 0) {
+					const firstKey = suffixIndex.keys().next().value;
+					console.log('Sample suffix key:', firstKey, 'Count:', suffixIndex.get(firstKey).length);
+				}
+				
+				// --- 核心修复：重建索引供长词匹配查询使用 ---
+				const keys = Array.from(globalDictData.keys());
+				bloomFilter = new BloomFilter(keys.length * 10, 3);
+				keys.forEach(k => bloomFilter.add(k));
+				// ------------------------------------------
+
 				window.dictLoaded = true;
 				window.isDictLoading = false;
 				devLog('词库全量载入内存耗时:', (performance.now() - startTime).toFixed(2), 'ms');
@@ -1466,7 +1491,7 @@
 			queryKeys.forEach(k => {
 				buildKeyVariants(k).forEach(v => {
 					const encoded = encodeKey(v);
-					// 内存查询模式下，不需要 Bloom Filter
+					// 内存模式下直接信任内存数据，不使用 Bloom Filter 过滤以防漏掉结果
 					queryVariantSet.add(encoded);
 				});
 			});
@@ -1477,7 +1502,20 @@
 			
 			// 优化方案：移动端优先，只使用精准哈希查询
 			for (const qk of queryVariantSet) {
-				const candidates = await getFromDB(qk);
+			// 🔍 DEBUG: 深度诊断
+			console.log('=== DEBUG: 深度诊断 ===');
+			console.log('1. qk:', qk, 'Length:', qk.length);
+			if (qk.length >= 2) {
+				const suffix = qk.slice(-2);
+				const longerKeys = suffixIndex.get(suffix) || [];
+				console.log('2. suffix:', suffix, 'Found keys in suffixIndex:', longerKeys.length);
+				if (longerKeys.length > 0) {
+					console.log('3. Sample longer key:', longerKeys[0], 'Ends with qk?', longerKeys[0].endsWith(qk));
+				}
+			}
+
+			// 1. 精确匹配（相同长度）
+			const candidates = await getFromDB(qk);
 				if (candidates && Array.isArray(candidates)) {
 					for (const phrase of candidates) {
 						const phraseLen = Array.from(phrase).length;
@@ -1486,6 +1524,30 @@
 						}
 						if (!matchedByWordCount[phraseLen].includes(phrase)) {
 							matchedByWordCount[phraseLen].push(phrase);
+						}
+					}
+				}
+
+				// 2. 后缀匹配（更长的词）
+				// 使用末尾一个字（长度2）进行初步索引筛选，提高效率
+				if (qk.length >= 2) {
+					const suffix = qk.slice(-2);
+					const longerKeys = suffixIndex.get(suffix) || [];
+					for (const lk of longerKeys) {
+						// 严格匹配整个 qk 作为后缀，且长度更长
+						if (lk.endsWith(qk) && lk.length > qk.length) {
+							const moreCandidates = await getFromDB(lk);
+							if (moreCandidates && Array.isArray(moreCandidates)) {
+								for (const phrase of moreCandidates) {
+									const phraseLen = Array.from(phrase).length;
+									if (!matchedByWordCount[phraseLen]) {
+										matchedByWordCount[phraseLen] = [];
+									}
+									if (!matchedByWordCount[phraseLen].includes(phrase)) {
+										matchedByWordCount[phraseLen].push(phrase);
+									}
+								}
+							}
 						}
 					}
 				}
@@ -1575,9 +1637,9 @@
 		}
 		
 		return {
-			sameLength: sameLengthResults.length > 0 ? sameLengthResults : null,
-			lessLength: lessLengthResults.length > 0 ? lessLengthResults : null,
-			moreLengths: moreLengthResults.length > 0 ? moreLengthResults : null
+			sameLength: sameLengthResults.length > 0 ? sameLengthResults : [],
+			lessLength: lessLengthResults.length > 0 ? lessLengthResults : [],
+			moreLengths: moreLengthResults.length > 0 ? moreLengthResults : []
 		};
 	};
 
@@ -1790,18 +1852,6 @@
 				currentDictResult = dictResult;
 				render(newInfos, firstAiWord, dictResult, src, true);
 
-				// 填充更多匹配结果列表
-				const seen = new Set();
-				[...dictResult.lessLength, ...dictResult.moreLengths].forEach(phrase => {
-					if (seen.has(phrase)) return;
-					seen.add(phrase);
-					const span = document.createElement('span');
-					span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px;';
-					span.textContent = phrase;
-					matchedResultsList.appendChild(span);
-				});
-				document.getElementById('matchedResults').style.display = 'block';
-
 			} catch (e) {
 				console.error('AI 生成失败:', e);
 				let errorMsg = e.message;
@@ -1873,85 +1923,6 @@
 			
 			// 获取用户输入的原词（用于排除）
 			const userInput = tempInfosWithOverrides.map(info => info.char).join('');
-			
-			// 显示匹配结果（字数更多的）
-			const matchedResults = document.getElementById('matchedResults');
-			const matchedResultsList = document.getElementById('matchedResultsList');
-			
-			// 首先清空列表
-			matchedResultsList.innerHTML = '';
-			
-			// 收集所有匹配词
-			let allMatchedPhrases = [];
-			const seen = new Set();
-			const collectPhrase = (phrase) => {
-				if (seen.has(phrase)) return;
-				if (phrase === userInput) return;
-				if (phrase.includes(userInput)) return;
-				seen.add(phrase);
-				allMatchedPhrases.push(phrase);
-			};
-
-			if (dictResult) {
-				// 少一字匹配
-				if (dictResult.lessLength && dictResult.lessLength.length > 0) {
-					let filteredLess = dictResult.lessLength.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
-					let displayLess = filteredLess.length > 0 ? filteredLess : dictResult.lessLength;
-					if (looseness >= 1.0 && pingzeFilter !== 'all') {
-						displayLess = filterByPingZe(displayLess, pingzeFilter);
-					}
-					displayLess.forEach(collectPhrase);
-				}
-
-				// 更多字匹配
-				if (dictResult.moreLengths && dictResult.moreLengths.length > 0) {
-					let filteredMore = dictResult.moreLengths.filter(phrase => phraseFitsSource(phrase, tempInfosWithOverrides, looseness));
-					let displayMore = filteredMore.length > 0 ? filteredMore : dictResult.moreLengths;
-					if (looseness >= 1.0 && pingzeFilter !== 'all') {
-						displayMore = filterByPingZe(displayMore, pingzeFilter);
-					}
-					
-					const groupedByLength = {};
-					for (const phrase of displayMore) {
-						const len = Array.from(phrase).length;
-						if (!groupedByLength[len]) groupedByLength[len] = [];
-						groupedByLength[len].push(phrase);
-					}
-					
-					for (const [len, phrases] of Object.entries(groupedByLength)) {
-						const lengthNum = parseInt(len);
-						if (lengthNum <= 2) {
-							phrases.forEach(collectPhrase);
-							continue;
-						}
-						const groupedByTail = {};
-						for (const phrase of phrases) {
-							const chars = Array.from(phrase);
-							const tail = chars.length >= 2 ? chars.slice(-2).join('') : phrase;
-							if (!groupedByTail[tail]) groupedByTail[tail] = [];
-							groupedByTail[tail].push(phrase);
-						}
-						for (const [tail, phrasesWithSameTail] of Object.entries(groupedByTail)) {
-							const randomIndex = Math.floor(Math.random() * phrasesWithSameTail.length);
-							collectPhrase(phrasesWithSameTail[randomIndex]);
-						}
-					}
-				}
-			}
-			
-			// 始终显示容器
-			matchedResults.style.display = 'block';
-			
-			if (allMatchedPhrases.length > 0) {
-				const container = document.getElementById('matchedResultsList');
-				container.innerHTML = '';
-				allMatchedPhrases.forEach(phrase => {
-					const span = document.createElement('span');
-					span.className = 'virtual-item';
-					span.textContent = phrase;
-					container.appendChild(span);
-				});
-			}
 			
 			if (dictResult) {
 				devLog('字典查询成功');
@@ -2214,7 +2185,7 @@
 				}
 				
 				// 然后添加字典中的相同字数结果（必须通过phraseFitsSource过滤）
-				if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength)) {
+				if (dictResult && dictResult.sameLength && dictResult.sameLength.length > 0) {
 					for (const phrase of dictResult.sameLength) {
 						// 排除用户输入和已经在结果中的词
 						if (phrase !== text && phrase !== userInput && !results.includes(phrase)) {
@@ -2252,6 +2223,39 @@
 					badge.innerHTML = `<i class="ri-sparkling-line"></i> ${text.length} 字`;
 					badges.appendChild(badge);
 				}
+			}
+
+			// 处理"更多匹配结果"（比用户输入长的词）
+			const matchedResults = document.getElementById('matchedResults');
+			const matchedResultsList = document.getElementById('matchedResultsList');
+			
+			if (matchedResultsList && matchedResults) {
+				matchedResultsList.innerHTML = '';
+				const moreMatches = [];
+				
+				// 收集比用户输入更长的词
+				if (dictResult && dictResult.moreLengths && dictResult.moreLengths.length > 0) {
+					moreMatches.push(...dictResult.moreLengths);
+				}
+				
+				// 显示"更多匹配结果"
+				let hasContent = false;
+				moreMatches.forEach(phrase => {
+					if (phrase && phrase !== userInput) {
+						const span = document.createElement('span');
+						span.style.cssText = 'padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer;';
+						span.textContent = phrase;
+						span.addEventListener('click', () => {
+							document.getElementById('source').value = phrase;
+							process();
+						});
+						matchedResultsList.appendChild(span);
+						hasContent = true;
+					}
+				});
+				
+				// 根据是否有内容来显示或隐藏容器
+				matchedResults.style.display = hasContent ? 'block' : 'none';
 			}
 			
 			// 更新下方详情表格

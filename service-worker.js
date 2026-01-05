@@ -1,11 +1,6 @@
 const CACHE_NAME = 'fakerhymes-cache-v1';
 const ASSETS = [
-  './',
-  './index.html',
-  './data.js',
-  './dict_optimized.json',
-  './dict-worker.js',
-  './custom.html'
+  './dict_optimized.json'
 ];
 
 self.addEventListener('install', (event) => {
