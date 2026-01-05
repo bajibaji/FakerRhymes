@@ -1261,11 +1261,11 @@
 				if (typeof Worker !== 'undefined') {
 					const worker = new Worker('./dict-worker.js');
 					worker.onmessage = (event) => {
-						const { type, message, data, percent } = event.data;
+						const { type, message, data, percent, progress } = event.data;
 						if (type === 'progress') {
-							updateSplash(message, percent ? Math.round(percent * 0.8) : undefined);
+							updateSplash(message, percent ? Math.round(percent * 0.4) : undefined);
 						} else if (type === 'parsing') {
-							updateSplash('正在解析数据...', 80 + Math.round(event.data.progress * 0.1));
+							updateSplash(message || '正在解析并存储...', 40 + Math.round(progress * 0.6));
 						} else if (type === 'success') {
 							updateSplash('词库加载成功', 100);
 							window.dictLoaded = true;
@@ -1418,6 +1418,8 @@
 			{ name: '油求辙', finals: ['ou', 'iu', 'iou'] }
 		];
 
+		const coreRhymes = ['a', 'o', 'e', 'i', 'u', 'v', 'ai', 'ei', 'ao', 'ou', 'an', 'en', 'ang', 'eng', 'ong'];
+
 		// 松紧分级：
 		// 0（严格）：同韵同调（区分平翘舌、前后鼻音）
 		// 1（中等）：同调，但韵母放宽（不分平翘舌，不分前后鼻音）
@@ -1508,6 +1510,20 @@
 					}
 				});
 			});
+
+			// 特殊处理：如果没有任何变体通过 Bloom Filter，尝试只查询末尾字
+			if (queryVariantSet.size === 0 && validInfos.length > 1) {
+				const lastInfo = [validInfos[validInfos.length - 1]];
+				const lastKeys = generateQueryKeys(lastInfo);
+				lastKeys.forEach(k => {
+					buildKeyVariants(k).forEach(v => {
+						const encoded = encodeKey(v);
+						if (bloomFilter.mightContain(encoded)) {
+							queryVariantSet.add(encoded);
+						}
+					});
+				});
+			}
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
@@ -1520,6 +1536,11 @@
 				if (candidates && Array.isArray(candidates)) {
 					for (const phrase of candidates) {
 						const phraseLen = Array.from(phrase).length;
+						// 如果是单字查询结果，只保留匹配原句长度的词条（作为回退）
+						if (validInfos.length > 1 && queryKeys.length > 0 && !queryKeys.some(qk2 => encodeKey(qk2) === qk)) {
+							if (phraseLen !== sourceLength) continue;
+						}
+						
 						if (!matchedByWordCount[phraseLen]) {
 							matchedByWordCount[phraseLen] = [];
 						}

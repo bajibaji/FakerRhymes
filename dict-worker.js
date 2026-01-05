@@ -64,21 +64,32 @@ async function saveToDB(data) {
     // Clear existing data
     store.clear();
     
-    // Add data in chunks to avoid blocking
+    // Add data in larger chunks to speed up writing
     const keys = Object.keys(data);
     let i = 0;
-    const chunkSize = 1000;
+    const chunkSize = 5000; // Increased chunk size for faster processing
     
     function addNextChunk() {
-      const limit = Math.min(i + chunkSize, keys.length);
-      for (; i < limit; i++) {
-        store.put(data[keys[i]], keys[i]);
-      }
-      
-      if (i < keys.length) {
-        setTimeout(addNextChunk, 0);
-      } else {
-        resolve();
+      try {
+        const limit = Math.min(i + chunkSize, keys.length);
+        for (; i < limit; i++) {
+          store.put(data[keys[i]], keys[i]);
+        }
+        
+        const progress = Math.round((i / keys.length) * 100);
+        self.postMessage({
+          type: 'parsing',
+          progress: progress,
+          message: `正在存储到本地: ${progress}%`
+        });
+
+        if (i < keys.length) {
+          setTimeout(addNextChunk, 0);
+        } else {
+          // Transaction will auto-commit
+        }
+      } catch (err) {
+        reject(err);
       }
     }
     
