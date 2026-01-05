@@ -3,7 +3,6 @@
  * This runs in a separate thread to avoid blocking the main UI thread
  */
 
-<<<<<<< HEAD
 // Final to short code mapping
 const finalToCode = {
   'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
@@ -61,84 +60,63 @@ async function saveToDB(data) {
   const keys = Object.keys(data);
   const total = keys.length;
   let i = 0;
-  const chunkSize = 2000; // Reduced chunk size for better responsiveness
+  const chunkSize = 2000; 
 
   return new Promise((resolve, reject) => {
-<<<<<<< HEAD
-    function processNextBatch() {
-      // Create a new transaction for each batch to avoid long-running transaction issues
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      
-      const limit = Math.min(i + chunkSize, total);
-      for (; i < limit; i++) {
-        store.put(data[keys[i]], keys[i]);
-      }
-
-      transaction.oncomplete = () => {
-        const progress = Math.round((i / total) * 100);
-        self.postMessage({
-          type: 'parsing',
-          progress: progress,
-          message: `正在存储到本地: ${progress}%`
-        });
-
-        if (i < total) {
-          // Use a small delay to allow message passing and avoid event loop starvation
-          setTimeout(processNextBatch, 10);
-        } else {
-          resolve();
+    async function processNextBatch() {
+      try {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        
+        const limit = Math.min(i + chunkSize, total);
+        for (; i < limit; i++) {
+          store.put(data[keys[i]], keys[i]);
         }
-      };
 
-      transaction.onerror = (e) => {
-        console.error('IndexedDB transaction error:', e.target.error);
-        reject(e.target.error);
-      };
+        transaction.oncomplete = () => {
+          const progress = Math.round((i / total) * 100);
+          self.postMessage({
+            type: 'parsing',
+            progress: progress,
+            message: `正在存储到本地: ${progress}%`
+          });
 
-      // In case the transaction is aborted
-      transaction.onabort = (e) => {
-        console.error('IndexedDB transaction aborted:', e.target.error);
-        reject(new Error('Transaction aborted'));
-      };
-=======
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    
-    // Clear existing data
-    store.clear();
-    
-    // Add data in chunks to avoid blocking
-    const keys = Object.keys(data);
-    let i = 0;
-    const chunkSize = 1000;
-    
-    function addNextChunk() {
-      const limit = Math.min(i + chunkSize, keys.length);
-      for (; i < limit; i++) {
-        store.put(data[keys[i]], keys[i]);
+          if (i < total) {
+            setTimeout(processNextBatch, 10);
+          } else {
+            resolve();
+          }
+        };
+
+        transaction.onerror = (e) => {
+          console.error('IndexedDB transaction error:', e.target.error);
+          reject(e.target.error);
+        };
+
+        transaction.onabort = (e) => {
+          console.error('IndexedDB transaction aborted:', e.target.error);
+          reject(new Error('Transaction aborted'));
+        };
+      } catch (err) {
+        reject(err);
       }
-      
-      if (i < keys.length) {
-        setTimeout(addNextChunk, 0);
-      } else {
-        resolve();
-      }
->>>>>>> parent of 2fb5f8f (4)
     }
 
     // Clear the store before starting
-    const clearTransaction = db.transaction([STORE_NAME], 'readwrite');
-    clearTransaction.objectStore(STORE_NAME).clear();
-    clearTransaction.oncomplete = () => processNextBatch();
-    clearTransaction.onerror = (e) => reject(e.target.error);
+    try {
+      const clearTransaction = db.transaction([STORE_NAME], 'readwrite');
+      clearTransaction.objectStore(STORE_NAME).clear();
+      clearTransaction.oncomplete = () => processNextBatch();
+      clearTransaction.onerror = (e) => reject(e.target.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
-=======
->>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
 self.onmessage = async function(event) {
   const { action, payload } = event.data;
+  console.log('Worker received action:', action);
 
   if (action === 'loadAndProcess') {
     try {
@@ -146,6 +124,7 @@ self.onmessage = async function(event) {
       
       for (const source of dictSources) {
         try {
+          console.log('Processing source:', source.name);
           self.postMessage({
             type: 'progress',
             message: `加载中: ${source.name}...`
@@ -160,47 +139,16 @@ self.onmessage = async function(event) {
             throw new Error('HTTP ' + response.status);
           }
 
-          const contentLength = response.headers.get('content-length');
-          const total = parseInt(contentLength, 10);
-          const reader = response.body.getReader();
-          let receivedLength = 0;
-          const chunks = [];
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            receivedLength += value.length;
-
-            if (total) {
-              const progress = Math.round((receivedLength / total) * 100);
-              self.postMessage({
-                type: 'progress',
-                message: `下载中: ${source.name}... ${progress}%`,
-                percent: progress
-              });
-            }
-          }
-
-          self.postMessage({
-            type: 'progress',
-<<<<<<< HEAD
-            message: `解析${source.name}...`
-=======
-            message: `解析中: ${source.name}...`
->>>>>>> parent of c4c37cd (Revert "1.7.1 web update")
-          });
-
-<<<<<<< HEAD
           // Use Response.json() for potentially faster native parsing
           const data = await response.json();
+          console.log('Data fetched and parsed for:', source.name);
           
           // Re-encode keys and extract unique characters
           const uniqueChars = new Set();
           const optimizedDict = {};
           const keys = Object.keys(data);
           
-          // Optimized processing loop with larger yield steps
+          // Optimized processing loop
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i];
             const value = data[key];
@@ -226,21 +174,16 @@ self.onmessage = async function(event) {
             }
           }
 
+          console.log('Unique chars identified:', uniqueChars.size);
+
           if (uniqueChars.size > 0) {
             await saveToDB(optimizedDict);
-=======
-          const data = JSON.parse(jsonStr);
-          const { chars, stats } = processDict(data);
->>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
+            console.log('Saved to IndexedDB');
 
             self.postMessage({
               type: 'success',
               data: {
-<<<<<<< HEAD
                 chars: Array.from(uniqueChars),
-=======
-                chars,
->>>>>>> parent of 7108827 (优化查询速度 v1.7.0)
                 sourceName: source.name,
                 count: uniqueChars.size
               }
@@ -248,6 +191,7 @@ self.onmessage = async function(event) {
             return;
           }
         } catch (err) {
+          console.error(`Error processing source ${source.name}:`, err);
           self.postMessage({
             type: 'error',
             message: `${source.name} 加载失败: ${err.message}`
@@ -261,6 +205,7 @@ self.onmessage = async function(event) {
         message: '所有词库源均加载失败'
       });
     } catch (err) {
+      console.error('Worker top-level error:', err);
       self.postMessage({
         type: 'error',
         message: `Worker 错误: ${err.message}`
@@ -268,73 +213,3 @@ self.onmessage = async function(event) {
     }
   }
 };
-
-function processDict(data) {
-  const chars = new Set();
-  let stats = {
-    totalStrings: 0,
-    totalChars: 0,
-    uniqueChars: 0,
-    categories: 0
-  };
-
-  if (Array.isArray(data)) {
-    stats.categories = 1;
-    data.forEach((item, idx) => {
-      if (idx % 1000 === 0) {
-        self.postMessage({
-          type: 'parsing',
-          progress: Math.round((idx / data.length) * 100)
-        });
-      }
-
-      if (typeof item === 'string') {
-        stats.totalStrings++;
-        Array.from(item).forEach(ch => {
-          if (/[\u4e00-\u9fa5]/.test(ch)) {
-            stats.totalChars++;
-            chars.add(ch);
-          }
-        });
-      } else if (item && (item.word || item.char)) {
-        stats.totalStrings++;
-        const word = item.word || item.char;
-        Array.from(word).forEach(ch => {
-          if (/[\u4e00-\u9fa5]/.test(ch)) {
-            stats.totalChars++;
-            chars.add(ch);
-          }
-        });
-      }
-    });
-  } else if (data && typeof data === 'object') {
-    const entries = Object.entries(data);
-    stats.categories = entries.length;
-    
-    entries.forEach(([key, value], idx) => {
-      if (idx % 5000 === 0) {
-        self.postMessage({
-          type: 'parsing',
-          progress: Math.round((idx / entries.length) * 100)
-        });
-      }
-
-      if (Array.isArray(value)) {
-        stats.totalStrings += value.length;
-        value.forEach(item => {
-          if (typeof item === 'string') {
-            Array.from(item).forEach(ch => {
-              if (/[\u4e00-\u9fa5]/.test(ch)) {
-                stats.totalChars++;
-                chars.add(ch);
-              }
-            });
-          }
-        });
-      }
-    });
-  }
-
-  stats.uniqueChars = chars.size;
-  return { chars: Array.from(chars), stats };
-}
