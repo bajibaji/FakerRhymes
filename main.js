@@ -1,64 +1,116 @@
 const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
-const { GoogleGenAI } = require("@google/genai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const nodeFetch = require('node-fetch');
 
-// 处理 Gemini API 请求
-ipcMain.handle('generate-content', async (event, apiKey, prompt, proxyUrl) => {
-  // 保存原始 fetch，虽然我们可能不会恢复它，但在 Electron 中最好小心
-  const originalFetch = global.fetch;
+// 全局异常捕获，防止 Socket 错误导致应用崩溃
+process.on('uncaughtException', (error) => {
+  console.error('[Uncaught Exception]', error);
+});
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Unhandled Rejection]', reason);
+});
+
+// 处理 Gemini API 请求
+ipcMain.handle('generate-content', async (event, apiKey, prompt, proxyUrl, modelName) => {
   try {
-    let agent;
+    let agent = null;
 
     if (proxyUrl) {
-      // 1. 规范化代理 URL
       if (!proxyUrl.includes('://')) {
          proxyUrl = `http://${proxyUrl}`;
       }
-      console.log(`[Gemini] Using proxy: ${proxyUrl}`);
 
-      // 2. 根据协议选择 Agent
       if (proxyUrl.startsWith('socks')) {
         agent = new SocksProxyAgent(proxyUrl);
       } else {
-        // HTTP/HTTPS 代理
-        // rejectUnauthorized: false 允许自签名证书，防止代理报错
-        agent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+        // 使用更兼容的配置
+        const options = {
+          rejectUnauthorized: false,
+          keepAlive: true,
+          scheduling: 'lifo',
+          timeout: 20000
+        };
+        agent = new HttpsProxyAgent(proxyUrl, options);
       }
-    } else {
-      console.log(`[Gemini] Direct connection (no proxy)`);
     }
 
-    // 3. 关键步骤：完全接管 global.fetch
-    // 官方 SDK 使用 global.fetch，我们用 node-fetch + agent 替换它
-    global.fetch = (url, init) => {
-      return nodeFetch(url, { ...init, agent: agent });
+    // 使用 node-fetch 并配合代理
+    const customFetch = async (url, init) => {
+      try {
+        return await nodeFetch(url, {
+          ...init,
+          agent,
+          timeout: 60000
+        });
+      } catch (fetchErr) {
+        // 捕获可能从 fetch 逃逸的 Socket 错误
+        console.error('[Fetch Internal Error]', fetchErr);
+        throw fetchErr;
+      }
     };
-    
-    // 4. 补全 node-fetch 需要的全局对象
-    if (!global.Headers) global.Headers = nodeFetch.Headers;
-    if (!global.Request) global.Request = nodeFetch.Request;
-    if (!global.Response) global.Response = nodeFetch.Response;
 
-    // 5. 初始化 SDK 并调用
-    const genAI = new GoogleGenAI({ apiKey });
-    
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt
-    });
-    
-    return { success: true, text: result.text };
+    if (agent) {
+        // 彻底覆盖全局 fetch 接口
+        global.fetch = customFetch;
+        globalThis.fetch = customFetch;
+    }
+
+    // 直接在构造函数或 getGenerativeModel 中显式指定 apiClient 或自定义 fetch
+    // 某些版本的 SDK 允许通过 RequestOptions 传递 fetchFn
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const model = genAI.getGenerativeModel(
+      { model: modelName || "gemini-2.0-flash" },
+      {
+        apiVersion: 'v1alpha',
+        // 强制指定自定义 fetch 函数，绕过全局 fetch 检测
+        // @ts-ignore
+        fetchFn: customFetch
+      }
+    );
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    return { success: true, text: text };
 
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    return { success: false, error: `${error.message} (Proxy: ${proxyUrl || 'None'})` };
-  } finally {
-    // 恢复环境，避免影响应用其他部分的 fetch 请求
-    if (originalFetch) global.fetch = originalFetch;
+    // 增加详细的错误日志捕获，根据 SDK 文档
+    console.error("=== Gemini API Error Details ===");
+    console.error("Message:", error.message);
+    
+    // 检查是否为 SDK 定义的错误
+    if (error.response) {
+      try {
+        const details = error.response;
+        console.error("Status:", details.status);
+        console.error("Status Text:", details.statusText);
+        // 如果有更详细的错误信息
+        if (details.promptFeedback) {
+          console.error("Prompt Feedback:", JSON.stringify(details.promptFeedback));
+        }
+      } catch (e) {}
+    }
+
+    if (error.stack) {
+      console.error("Stack Trace:", error.stack);
+    }
+    
+    // 如果存在 cause (Node.js 16.9.0+)
+    if (error.cause) {
+      console.error("Cause:", error.cause);
+    }
+    console.error("===============================");
+
+    let friendlyError = error.message;
+    if (error.message.includes('socket hang up') || error.message.includes('ECONNRESET')) {
+      friendlyError = `模型请求失败 (${modelName})。原因可能是模型名称不存在、您的 API Key 权限不足，或代理服务器断开连接。请尝试使用 gemini-2.0-flash。`;
+    }
+    return { success: false, error: `Gemini API Error: ${friendlyError}` };
   }
 });
 
@@ -66,35 +118,31 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1000,
     height: 1080,
+    show: false, // 先隐藏窗口，等待内容加载完成
+    backgroundColor: '#1b0d22', // 设置背景色避免白屏
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, 'icon.png'), // 可选：如有图标
+    icon: path.join(__dirname, 'icon.png'),
   });
 
-  // 隐藏菜单栏
   Menu.setApplicationMenu(null);
-
   win.loadFile('index.html');
 
-  // 自定义滚动栏样式
+  // 等待内容渲染完成后再显示窗口，避免闪烁
+  win.once('ready-to-show', () => {
+    win.show();
+  });
+
   win.webContents.on('did-finish-load', () => {
     win.webContents.insertCSS(`
-      ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb {
         background: linear-gradient(180deg, #1f0f3aff 0%, #093f47ff 100%);
         border-radius: 5px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: linear-gradient(180deg, #1fb6ce6b 0%, #7c3aed60 100%);
       }
     `);
   });
@@ -103,13 +151,9 @@ function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
