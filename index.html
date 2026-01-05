@@ -740,6 +740,46 @@
 			color: var(--text);
 		}
 
+		/* Loading Splash Screen */
+		#loadingSplash {
+			position: fixed;
+			inset: 0;
+			background: var(--bg);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			z-index: 9999;
+			transition: opacity 0.5s ease, visibility 0.5s ease;
+		}
+
+		.splash-logo {
+			font-size: 48px;
+			margin-bottom: 24px;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			font-weight: 800;
+			letter-spacing: -1px;
+		}
+
+		.splash-loader {
+			width: 40px;
+			height: 40px;
+			border: 3px solid rgba(255, 255, 255, 0.1);
+			border-top-color: var(--accent-2);
+			border-radius: 50%;
+			animation: spin 1s linear infinite;
+		}
+
+		.splash-text {
+			margin-top: 20px;
+			font-size: 14px;
+			color: var(--muted);
+			letter-spacing: 2px;
+			text-transform: uppercase;
+		}
+
 		@media (max-width: 600px) {
 			.modal-content h3 {
 				font-size: 15px;
@@ -755,6 +795,12 @@
 	</style>
 </head>
 <body>
+	<div id="loadingSplash">
+		<div class="splash-logo">FakerRhymes</div>
+		<div class="splash-loader"></div>
+		<div class="splash-text">正在加载词库...</div>
+	</div>
+
 	<div class="bg-blob blob-1"></div>
 	<div class="bg-blob blob-2"></div>
 	<div class="bg-blob blob-3"></div>
@@ -902,48 +948,59 @@
 			}
 			gsap.config({ nullTargetWarn: false });
 
-			// 1. Background Blobs Floating
-			gsap.to(".blob-1", {
-				x: "20%", y: "20%", duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut"
-			});
-			gsap.to(".blob-2", {
-				x: "-20%", y: "-20%", duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 1
-			});
-			gsap.to(".blob-3", {
-				x: "15%", y: "-15%", scale: 1.2, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 2
-			});
+			// 将动画逻辑包装在一个函数中，供加载完成后调用
+			window.startMainAnimations = () => {
+				const splash = document.getElementById('loadingSplash');
+				if (splash) {
+					splash.style.opacity = '0';
+					setTimeout(() => {
+						splash.style.visibility = 'hidden';
+					}, 500);
+				}
 
-			// 2. Entry Animations
-			const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+				// 1. Background Blobs Floating
+				gsap.to(".blob-1", {
+					x: "20%", y: "20%", duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut"
+				});
+				gsap.to(".blob-2", {
+					x: "-20%", y: "-20%", duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 1
+				});
+				gsap.to(".blob-3", {
+					x: "15%", y: "-15%", scale: 1.2, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 2
+				});
 
-			tl.from(".shell", {
-				y: 30,
-				opacity: 0,
-				duration: 1,
-				clearProps: "all"
-			})
-			.from("header h1", {
-				y: 20,
-				opacity: 0,
-				duration: 0.4
-			}, "-=0.8")
-			.from("header .subtitle", {
-				y: 10,
-				opacity: 0,
-				duration: 0.2
-			}, "-=0.6")
-			.from(".panel", {
-				y: 30,
-				opacity: 0,
-				duration: 0.1,
-				stagger: 0.15,
-				clearProps: "all"
-			}, "-=0.6")
-			.from(".footer", {
-				opacity: 0,
-			duration: 1,
-			clearProps: "all"
-		}, "-=0.4");
+				// 2. Entry Animations
+				const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+
+				tl.from(".shell", {
+					y: 30,
+					opacity: 0,
+					duration: 1,
+					clearProps: "all"
+				})
+				.from("header h1", {
+					y: 20,
+					opacity: 0,
+					duration: 0.4
+				}, "-=0.8")
+				.from("header .subtitle", {
+					y: 10,
+					opacity: 0,
+					duration: 0.2
+				}, "-=0.6")
+				.from(".panel", {
+					y: 30,
+					opacity: 0,
+					duration: 0.1,
+					stagger: 0.15,
+					clearProps: "all"
+				}, "-=0.6")
+				.from(".footer", {
+					opacity: 0,
+					duration: 1,
+					clearProps: "all"
+				}, "-=0.4");
+			};
 
 		// 3. Interactive Elements
 		const buttons = document.querySelectorAll(".btn");
@@ -1017,6 +1074,7 @@
 		let currentInfos = [];
 		let currentDictResult = null; // 存储字典查询结果
 		let dict = null; // 优化字典
+		let suffixIndex = new Map(); // 新增：后缀索引，用于支持更长词匹配
 		let locks = [];
 
 		// 平仄过滤函数：根据尾字声调过滤词语列表
@@ -1116,17 +1174,40 @@
 				const text = await resp.text();
 				const rawDict = JSON.parse(text);
 				dict = {};
+				suffixIndex = new Map();
 				bloomFilter = new BloomFilter(Object.keys(rawDict).length * 10, 3);
 				for (const [key, value] of Object.entries(rawDict)) {
 					const encoded = encodeKey(key);
 					dict[encoded] = value;
 					bloomFilter.add(encoded);
+
+					// 构建后缀索引 (支持末尾 1-2 个字的韵脚查询)
+					const parts = encoded.match(/.{2}/g) || [];
+					if (parts.length >= 1) {
+						const last1 = parts[parts.length - 1]; // 最后一个字的 encoded key
+						if (!suffixIndex.has(last1)) suffixIndex.set(last1, new Set());
+						suffixIndex.get(last1).add(encoded);
+					}
+					if (parts.length >= 2) {
+						const last2 = parts.slice(-2).join(''); // 最后两个字的 encoded key
+						if (!suffixIndex.has(last2)) suffixIndex.set(last2, new Set());
+						suffixIndex.get(last2).add(encoded);
+					}
 				}
-			devLog('字典加载成功,共', Object.keys(dict).length, '条');
-		} catch(e) {
-			console.error('字典加载失败:', e);
-		}
-	};
+				devLog('字典加载成功,共', Object.keys(dict).length, '条');
+				
+				// 字典加载成功后，如果主动画还没开始，则开始动画
+				if (window.startMainAnimations) {
+					window.startMainAnimations();
+				}
+			} catch(e) {
+				console.error('字典加载失败:', e);
+				// 失败也要进入网页
+				if (window.startMainAnimations) {
+					window.startMainAnimations();
+				}
+			}
+		};
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
@@ -1333,10 +1414,11 @@
 			const matchedByWordCount = {};
 			const sourceLength = infos.length;
 			
-			// 遍历查询变体集而不是整个字典
+			// 优化方案：移动端优先，只使用精准哈希查询，彻底移除全字典扫描
+			// 既然已经有了 Bloom Filter，我们就只查询存在的变体
 			if (dict) {
 				for (const qk of queryVariantSet) {
-					// 直接查询 encoded key
+					// 1. 精准匹配 (例如输入 2 个字，查询 2 个字的词)
 					const candidates = dict[qk];
 					if (candidates && Array.isArray(candidates)) {
 						for (const phrase of candidates) {
@@ -1349,30 +1431,22 @@
 							}
 						}
 					}
-				}
-				
-				// 还需要处理以 qk 结尾的键 (例如 query 是 "an4_u4", 字典中有 "i1_an4_u4")
-				// 由于我们现在使用了 Bloom Filter 和 encoded keys，这里的逻辑需要保持兼容
-				// 如果 Bloom Filter 只是为了过滤不存在的 key，那么前缀匹配仍然需要某种方式
-				// 不过原逻辑是: buildKeyVariants(dictKey).some(...) 
-				// 现在的 dict 是以 encodedKey 为键的
-				
-				// 优化：只有当 queryVariantSet 不为空时才进行更深层次的搜索，或者改变数据结构以支持后缀查询
-				// 为了保持功能，我们保留对 dict 的遍历，但使用 Bloom Filter 加速
-				for (const [dictKey, candidates] of Object.entries(dict)) {
-					const hasMatch = Array.from(queryVariantSet).some(qk => {
-						return dictKey === qk || dictKey.endsWith(qk);
-					});
 					
-					if (!hasMatch) continue;
-					if (candidates && Array.isArray(candidates)) {
-						for (const phrase of candidates) {
-							const phraseLen = Array.from(phrase).length;
-							if (!matchedByWordCount[phraseLen]) {
-								matchedByWordCount[phraseLen] = [];
-							}
-							if (!matchedByWordCount[phraseLen].includes(phrase)) {
-								matchedByWordCount[phraseLen].push(phrase);
+					// 2. 后缀匹配优化：使用 suffixIndex 代替全量扫描
+					// 这样即便在移动端，也能瞬间找到所有以 qk 结尾的长词
+					if (suffixIndex.has(qk)) {
+						for (const fullKey of suffixIndex.get(qk)) {
+							const longCandidates = dict[fullKey];
+							if (longCandidates) {
+								for (const phrase of longCandidates) {
+									const phraseLen = Array.from(phrase).length;
+									if (!matchedByWordCount[phraseLen]) {
+										matchedByWordCount[phraseLen] = [];
+									}
+									if (!matchedByWordCount[phraseLen].includes(phrase)) {
+										matchedByWordCount[phraseLen].push(phrase);
+									}
+								}
 							}
 						}
 					}
@@ -2701,11 +2775,20 @@
 				setOutputStatus(`pinyin-pro 已加载 (${url})，可点击生成。`);
 			});
 			
-			// 加载优化字典
+			// 立即加载优化字典，加载完成后会触发动画
 			loadDict();
 		};
 
 		init();
+	</script>
+	<script>
+		if ('serviceWorker' in navigator) {
+			window.addEventListener('load', () => {
+				navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+					console.warn('Service worker registration failed', err);
+				});
+			});
+		}
 	</script>
 	<!-- Help Button -->
 	<button class="help-btn" id="helpTriggerBtn" title="使用说明">?</button>
