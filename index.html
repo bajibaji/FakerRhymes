@@ -2362,12 +2362,12 @@
 						bloomFilter = new BloomFilter(keys.length * 10, 3);
 						keys.forEach(k => bloomFilter.add(k));
 						
-						btn.textContent = `✓ 已加载 ${chars.length} 字`;
+						btn.textContent = `✓ 已加载`;
 						btn.style.background = 'rgba(34, 211, 238, 0.2)';
 						window.dictLoaded = true;
 						
 						setTimeout(() => {
-							btn.innerHTML = `✅ 已缓存 ${chars.length} 字`;
+							btn.innerHTML = `✓ 已缓存`;
 							btn.disabled = false;
 							btn.style.background = '';
 							updateDictStatus();
@@ -2487,7 +2487,7 @@
 				dictStatusText.textContent = statusText;
 
 				setTimeout(() => {
-					btn.innerHTML = `✅️ 已缓存 ${charArray.length} 字`;
+					btn.innerHTML = `✓ 已缓存`;
 					btn.disabled = false;
 					btn.style.background = '';
 				}, 1500);
@@ -2679,7 +2679,7 @@
 					const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '核心词库';
 					const date = new Date(Number(cachedTime));
 					
-					loadDictBtn.innerHTML = `✅ 已缓存 ${count} 字`;
+					loadDictBtn.innerHTML = `✓ 已缓存`;
 					dictStatus.style.display = 'block';
 					dictStatusText.textContent = `📖 词库：${count} 个汉字（${source}） | ${date.toLocaleString('zh-CN')}`;
 				}
