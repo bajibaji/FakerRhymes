@@ -50,7 +50,7 @@ self.onmessage = async function(event) {
           // Report progress
           self.postMessage({
             type: 'progress',
-            message: `加载中: ${source.name}...`
+            message: `加载中: ${source.name}`
           });
 
           const response = await fetch(source.url, {
@@ -79,7 +79,7 @@ self.onmessage = async function(event) {
               const progress = Math.round((receivedLength / total) * 100);
               self.postMessage({
                 type: 'progress',
-                message: `下载中: ${source.name}... ${progress}%`,
+                message: `下载中: ${progress}%`,
                 percent: progress
               });
             }
@@ -97,7 +97,7 @@ self.onmessage = async function(event) {
           
           self.postMessage({
             type: 'progress',
-            message: `解析中: ${source.name}...`
+            message: `解析${source.name}`
           });
 
           const data = JSON.parse(jsonStr);

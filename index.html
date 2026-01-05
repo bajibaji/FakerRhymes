@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>中文押韵生成器</title>
+	<title>废壳韵脚生成器 v1.7.1 (Web)</title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<style>
@@ -579,6 +579,12 @@
 			box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
 		}
 
+		/* 最松按钮特殊样式 - 紫红渐变 */
+		.segment-btn[data-value="1"].active {
+			background: linear-gradient(135deg, #a855f7, #ec4899);
+			box-shadow: 0 2px 8px rgba(236, 72, 153, 0.4);
+		}
+
 		@media (max-width: 600px) {
 			.segment-btn {
 				padding: 8px 2px;
@@ -755,7 +761,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.0</h1>
+			<h1>废壳韵脚生成器 v1.7.1</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
