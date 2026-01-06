@@ -460,8 +460,13 @@ th {
 	z-index: -1;
 	opacity: 0.6;
 	pointer-events: none;
-	will-change: opacity;
+	will-change: transform, opacity;
 	transform: translateZ(0);
+}
+
+/* 初始隐藏需要动画的元素，防止 FOUC */
+.shell, .panel {
+	visibility: hidden;
 }
 
 .blob-1 { 

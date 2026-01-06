@@ -115,6 +115,9 @@ ipcMain.handle('generate-content', async (event, apiKey, prompt, proxyUrl, model
 });
 
 function createWindow() {
+  console.log('[DEBUG] 开始创建窗口...');
+  console.log('[DEBUG] 图标路径:', path.join(__dirname, 'icon.ico'));
+  
   const win = new BrowserWindow({
     width: 1000,
     height: 1080,
@@ -125,15 +128,26 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(__dirname, 'icon.ico'), // 修正：使用正确的图标文件扩展名
   });
 
+  console.log('[DEBUG] BrowserWindow 创建完成，当前 show 状态:', win.isVisible());
+  console.log('[DEBUG] 窗口初始大小:', win.getSize());
+
+  // 注释掉 DevTools 自动打开，避免影响窗口布局
+  // win.webContents.openDevTools();
+
   Menu.setApplicationMenu(null);
+  
+  console.log('[DEBUG] 开始加载 index.html...');
   win.loadFile('index.html');
 
   // 等待内容渲染完成后再显示窗口，避免闪烁
   win.once('ready-to-show', () => {
+    console.log('[DEBUG] ready-to-show 事件触发');
+    console.log('[DEBUG] 显示前窗口大小:', win.getSize());
     win.show();
+    console.log('[DEBUG] 窗口已显示，当前大小:', win.getSize());
   });
 
   win.webContents.on('did-finish-load', () => {

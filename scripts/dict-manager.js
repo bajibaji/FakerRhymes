@@ -33,12 +33,13 @@ const preloadCustomBank = async () => {
  */
 const buildDictIndex = async () => {
 	if (!dict) return;
+	console.time('build-dict-index-total');
 	dictIndex = new Map();
 	
 	const entries = Object.entries(dict);
 	const total = entries.length;
 	let current = 0;
-	const batchSize = 500; // 每批处理的数量
+	const batchSize = 500; // 每批处理的数量，进一步缩小以减少长任务
 
 	const processBatch = (deadline) => {
 		while ((deadline.timeRemaining() > 0 || deadline.didTimeout) && current < total) {
@@ -65,10 +66,10 @@ const buildDictIndex = async () => {
 		}
 
 		if (current < total) {
-			requestIdleCallback(processBatch);
+			requestIdleCallback(processBatch, { timeout: 500 });
 		} else {
 			// 全部处理完后去重
-			requestIdleCallback(deduplicateIndex);
+			requestIdleCallback(deduplicateIndex, { timeout: 500 });
 		}
 	};
 
@@ -84,17 +85,18 @@ const buildDictIndex = async () => {
 			}
 			
 			if (keyIdx < keys.length) {
-				requestIdleCallback(processDeduplication);
+				requestIdleCallback(processDeduplication, { timeout: 500 });
 			} else {
 				devLog && devLog('字典索引异步构建并去重完成');
+				console.timeEnd('build-dict-index-total');
 			}
 		};
 		
-		requestIdleCallback(processDeduplication);
+		requestIdleCallback(processDeduplication, { timeout: 500 });
 	};
 
 	if (window.requestIdleCallback) {
-		requestIdleCallback(processBatch);
+		requestIdleCallback(processBatch, { timeout: 500 });
 	} else {
 		// Fallback to setTimeout
 		const runSync = () => {

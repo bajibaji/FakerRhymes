@@ -3,8 +3,18 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>废壳韵脚生成器 v1.7.4</title>
+	<title>废壳韵脚生成器 v1.7.5</title>
 	<link rel="preconnect" href="https://unpkg.com" />
+	<link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+	<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+	
+	<!-- Preload Critical Resources -->
+	<link rel="preload" href="styles/main.css" as="style" />
+	<link rel="preload" href="scripts/app.js" as="script" />
+	<link rel="preload" href="scripts/rhyme-engine.js" as="script" />
+	<link rel="preload" href="scripts/dict-manager.js" as="script" />
+	<link rel="preload" href="https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js" as="script" />
+
 	<link href="remixicon/remixicon.css" rel="stylesheet" />
 	<link rel="stylesheet" href="styles/main.css">
 </head>
@@ -15,7 +25,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.4</h1>
+			<h1>废壳韵脚生成器 v1.7.5</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -67,7 +77,7 @@
 					</div>
 				</div>
 
-				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*使用前请先加载词库*</div>
+				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*第一次使用前请先加载词库*</div>
 				<div class="hint">- 严格：同韵同调  | 中等：韵母放宽 | 最松：忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，调节韵脚宽松度即可。</div>
 			</section>
@@ -225,23 +235,60 @@
 
 
 	
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-	<script src="data.js"></script>
-	<script src="scripts/db.js"></script>
-	<script src="scripts/rhyme-engine.js"></script>
-	<script src="scripts/dict-manager.js"></script>
-	<script src="scripts/app.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js" defer></script>
+	<script src="https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.min.js" defer></script>
+	<script src="data.js" defer></script>
+	<script src="scripts/db.js" defer></script>
+	<script src="scripts/rhyme-engine.js" defer></script>
+	<script src="scripts/dict-manager.js" defer></script>
+	<script src="scripts/app.js" defer></script>
 	
 	<script>
 		// GSAP Animations
-		document.addEventListener("DOMContentLoaded", () => {
+		window.addEventListener("load", () => {
+			console.time('gsap-init-and-run');
 			if (typeof gsap === 'undefined') return;
+			
+			// Register ScrollTrigger plugin
+			gsap.registerPlugin(ScrollTrigger);
 			
 			gsap.to(".blob-1", { x: "20%", y: "20%", duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut" });
 			gsap.to(".blob-2", { x: "-20%", y: "-20%", duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 1 });
 			gsap.to(".blob-3", { x: "15%", y: "-15%", scale: 1.2, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 2 });
 
+			// 统一设置 visibility，避免 FOUC
+			gsap.set(".shell, .panel", { visibility: "visible" });
+
 			gsap.from(".shell", { y: 30, opacity: 0, duration: 1 });
+			console.timeEnd('gsap-init-and-run');
+
+			// AutoAnimate integration
+			if (typeof autoAnimate !== 'undefined') {
+				const outputContainer = document.getElementById('output');
+				const badgesContainer = document.getElementById('badges');
+				const matchedList = document.getElementById('matchedResultsList');
+				
+				autoAnimate(outputContainer);
+				autoAnimate(badgesContainer);
+				autoAnimate(matchedList);
+			}
+
+			// Apply ScrollTrigger to panels
+			gsap.utils.toArray(".panel").forEach((panel, i) => {
+				gsap.from(panel, {
+					scrollTrigger: {
+						trigger: panel,
+						start: "top 90%", // 当面板顶部到达视口 90% 位置时开始
+						toggleActions: "play none none none"
+					},
+					y: 50,
+					opacity: 0,
+					duration: 0.8,
+					delay: i * 0.1,
+					ease: "power2.out"
+				});
+			});
 			
 			window.triggerResultAnimation = () => {
 				gsap.fromTo("#output", { opacity: 0.5, y: 5 }, { opacity: 1, y: 0, duration: 0.4 });

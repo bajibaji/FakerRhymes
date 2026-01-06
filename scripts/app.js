@@ -105,9 +105,34 @@ const processAI = async (src, infos, looseness) => {
  * 执行生成逻辑
  */
 const process = () => {
-	const startTime = performance.now(); // 开始计时
+	performance.mark('process-start');
 	const goBtn = document.getElementById('go');
+	// 性能监控：强制记录每一帧的时间，检测微小抖动
+	let lastFrameTime = performance.now();
+	const checkJank = () => {
+		const now = performance.now();
+		const delta = now - lastFrameTime;
+		if (delta > 25) { // 如果帧间隔超过 25ms (即低于 40fps)
+			console.warn(`[JANK] 帧跳变检测: ${delta.toFixed(2)}ms`);
+		}
+		lastFrameTime = now;
+		requestAnimationFrame(checkJank);
+	};
+	requestAnimationFrame(checkJank);
+
 	const src = document.getElementById('source').value.trim();
+	console.log('触发生成，输入内容:', src);
+	
+	// 添加长任务检测
+	if (window.PerformanceObserver) {
+		const observer = new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				console.warn(`[PERF] 检测到长任务: ${entry.duration.toFixed(2)}ms`, entry);
+			}
+		});
+		observer.observe({entryTypes: ['longtask']});
+	}
+
 	const looseness = Number(document.getElementById('looseness').value);
 	const isAiMode = document.getElementById('aiMode').checked;
 	const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
@@ -140,7 +165,11 @@ const process = () => {
 		return;
 	}
 	
+	performance.mark('query-start');
 	const dictResult = DictManager.queryDict(tempInfos, looseness);
+	performance.mark('query-end');
+	performance.measure('Dict Query', 'query-start', 'query-end');
+	
 	const tier = getLoosenessTier(looseness);
 	
 	// Pre-filter sameLength results by pingze if needed (only in tier 2)
@@ -227,14 +256,18 @@ const process = () => {
 	render(currentInfos, currentInfos.map(i => i.generated).join(''), currentDictResult, userInput);
 	goBtn.classList.remove('loading');
 
-	const endTime = performance.now();
-	console.log(`查询耗时: ${(endTime - startTime).toFixed(2)}ms`);
+	performance.mark('process-end');
+	performance.measure('Total Process', 'process-start', 'process-end');
+	const measure = performance.getEntriesByName('Total Process').pop();
+	const queryMeasure = performance.getEntriesByName('Dict Query').pop();
+	console.log(`查询耗时: ${queryMeasure ? queryMeasure.duration.toFixed(2) : 0}ms, 总耗时: ${measure.duration.toFixed(2)}ms`);
 };
 
 /**
  * 渲染结果
  */
 const render = (infos, text, dictResult, userInput, skipFilter = false) => {
+	console.time('render-logic');
 	const output = document.getElementById('output');
 	const badges = document.getElementById('badges');
 	const looseness = Number(document.getElementById('looseness').value);
@@ -242,6 +275,7 @@ const render = (infos, text, dictResult, userInput, skipFilter = false) => {
 	const tier = getLoosenessTier(looseness);
 
 	if (output) {
+		console.time('dom-update-output');
 		let results = (text && text !== userInput) ? [text] : [];
 		if (dictResult?.sameLength) {
 			dictResult.sameLength.forEach(phrase => {
@@ -257,7 +291,28 @@ const render = (infos, text, dictResult, userInput, skipFilter = false) => {
 			results = filterByPingZe(results, pingzeFilter);
 		}
 		
-		output.innerHTML = results.map(r => `<span class="phrase-span">${r}</span>`).join('') || '-';
+		// 性能优化：大数据量时分批渲染
+		if (results.length > 100) {
+			output.innerHTML = '';
+			const batchSize = 50;
+			let index = 0;
+			
+			const renderBatch = () => {
+				const nextBatch = results.slice(index, index + batchSize);
+				const html = nextBatch.map(r => `<span class="phrase-span">${r}</span>`).join('');
+				output.insertAdjacentHTML('beforeend', html);
+				index += batchSize;
+				if (index < results.length) {
+					requestAnimationFrame(renderBatch);
+				} else {
+					console.timeEnd('dom-update-output');
+				}
+			};
+			requestAnimationFrame(renderBatch);
+		} else {
+			output.innerHTML = results.map(r => `<span class="phrase-span">${r}</span>`).join('') || '-';
+			console.timeEnd('dom-update-output');
+		}
 	}
 
 	if (badges && text) {
@@ -308,6 +363,7 @@ const render = (infos, text, dictResult, userInput, skipFilter = false) => {
 	});
 
 	if (window.triggerResultAnimation) window.triggerResultAnimation();
+	console.timeEnd('render-logic');
 };
 
 /**
@@ -394,22 +450,56 @@ const init = () => {
 	const cdnList = ['https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js'];
 	const loadScripts = (list) => {
 		if (!list.length) return;
+		console.time('pinyin-pro-load');
 		const s = document.createElement('script');
 		s.src = list.shift();
 		s.onload = () => {
+			console.timeEnd('pinyin-pro-load');
 			pinyinReady = true;
+			console.time('register-bank');
 			DictManager.setBankMap(DictManager.registerBank());
+			console.timeEnd('register-bank');
 		};
 		document.head.appendChild(s);
 	};
 	loadScripts(cdnList);
-	DictManager.loadDict();
+
+	// 延迟首帧后再启动初始字典加载，避免阻塞动画
+	let initialDictScheduled = false;
+	const scheduleInitialDictLoad = () => {
+		if (initialDictScheduled) return;
+		initialDictScheduled = true;
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				setTimeout(() => {
+					console.time('initial-load-dict');
+					DictManager.loadDict().then(() => {
+						console.timeEnd('initial-load-dict');
+					});
+				}, 200); // 允许首屏动画完成
+			});
+		});
+	};
+	window.addEventListener('load', scheduleInitialDictLoad);
 	// 初始化词库状态
 	if (DictManager) {
 		(async () => {
+			console.time('preload-custom-bank');
 			await DictManager.preloadCustomBank(); // 预加载自定义词库
+			console.timeEnd('preload-custom-bank');
 			DictManager.updateDictStatus();
 		})();
+	}
+
+	// 注册 Service Worker
+	if ('serviceWorker' in navigator) {
+		window.addEventListener('load', () => {
+			navigator.serviceWorker.register('./sw.js').then(reg => {
+				console.log('SW registered:', reg);
+			}).catch(err => {
+				console.log('SW registration failed:', err);
+			});
+		});
 	}
 };
 
