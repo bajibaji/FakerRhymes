@@ -158,11 +158,21 @@ const process = () => {
 	};
 
 	if (dictResult) {
-		if (dictResult.lessLength) {
-			dictResult.lessLength.forEach(appendPhrase);
-		}
-		if (dictResult.moreLengths) {
-			dictResult.moreLengths.forEach(appendPhrase);
+		const allCandidates = [];
+		if (dictResult.lessLength) allCandidates.push(...dictResult.lessLength);
+		if (dictResult.moreLengths) allCandidates.push(...dictResult.moreLengths);
+		
+		const groups = new Map();
+		allCandidates.forEach(p => {
+			if (p === userInput || p.includes(userInput)) return;
+			const key = p.length >= 2 ? p.slice(-2) : p;
+			if (!groups.has(key)) groups.set(key, []);
+			groups.get(key).push(p);
+		});
+		
+		for (const list of groups.values()) {
+			const picked = list[Math.floor(Math.random() * list.length)];
+			appendPhrase(picked);
 		}
 	}
 	
