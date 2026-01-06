@@ -141,6 +141,13 @@ const process = () => {
 	}
 	
 	const dictResult = DictManager.queryDict(tempInfos, looseness);
+	const tier = getLoosenessTier(looseness);
+	
+	// Pre-filter sameLength results by pingze if needed (only in tier 2)
+	if (tier === 2 && dictResult && dictResult.sameLength && pingzeFilter !== 'all') {
+		dictResult.sameLength = filterByPingZe(dictResult.sameLength, pingzeFilter);
+	}
+	
 	currentDictResult = dictResult;
 	
 	const userInput = src;
@@ -161,9 +168,15 @@ const process = () => {
 		const allCandidates = [];
 		if (dictResult.lessLength) allCandidates.push(...dictResult.lessLength);
 		if (dictResult.moreLengths) allCandidates.push(...dictResult.moreLengths);
+
+		// Apply pingze filter to "more results" as well (only in tier 2)
+		let filteredCandidates = allCandidates;
+		if (tier === 2 && pingzeFilter !== 'all') {
+			filteredCandidates = filterByPingZe(allCandidates, pingzeFilter);
+		}
 		
 		const groups = new Map();
-		allCandidates.forEach(p => {
+		filteredCandidates.forEach(p => {
 			if (p === userInput || p.includes(userInput)) return;
 			const key = p.length >= 2 ? p.slice(-2) : p;
 			if (!groups.has(key)) groups.set(key, []);
@@ -226,6 +239,7 @@ const render = (infos, text, dictResult, userInput, skipFilter = false) => {
 	const badges = document.getElementById('badges');
 	const looseness = Number(document.getElementById('looseness').value);
 	const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
+	const tier = getLoosenessTier(looseness);
 
 	if (output) {
 		let results = (text && text !== userInput) ? [text] : [];
@@ -239,7 +253,7 @@ const render = (infos, text, dictResult, userInput, skipFilter = false) => {
 			});
 		}
 		
-		if (pingzeFilter !== 'all') {
+		if (tier === 2 && pingzeFilter !== 'all') {
 			results = filterByPingZe(results, pingzeFilter);
 		}
 		
@@ -310,7 +324,20 @@ const init = () => {
 
 	const loosenInput = document.getElementById('looseness');
 	const loosenButtons = document.querySelectorAll('.looseness-btn');
+	const pingzeContainer = document.getElementById('pingzeFilterContainer');
 	
+	const updatePingzeVisibility = () => {
+		const tier = getLoosenessTier(Number(loosenInput.value));
+		if (tier === 2) {
+			pingzeContainer.style.display = 'block';
+		} else {
+			pingzeContainer.style.display = 'none';
+			// 自动重置为全部选项，避免隐藏时仍然应用筛选
+			const allRadio = document.querySelector('input[name="pingze"][value="all"]');
+			if (allRadio) allRadio.checked = true;
+		}
+	};
+
 	loosenButtons.forEach(btn => {
 		btn.addEventListener('click', () => {
 			const val = btn.getAttribute('data-value');
@@ -320,12 +347,16 @@ const init = () => {
 			loosenButtons.forEach(b => b.classList.remove('active'));
 			btn.classList.add('active');
 			
+			updatePingzeVisibility();
+
 			// Auto re-process if there is content
 			if (document.getElementById('source').value.trim()) {
 				process();
 			}
 		});
 	});
+
+	updatePingzeVisibility();
 
 	document.querySelectorAll('input[name="pingze"]').forEach(radio => {
 		radio.addEventListener('change', () => {
