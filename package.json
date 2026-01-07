@@ -1,6 +1,6 @@
 {
   "name": "faker-rhymes-robot",
-  "version": "1.7.5",
+  "version": "1.7.7",
   "description": "蟹不肉,废壳押韵机器人",
   "main": "main.js",
   "scripts": {

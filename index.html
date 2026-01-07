@@ -1,9 +1,9 @@
 ﻿<!DOCTYPE html>
-<html lang="zh">
+<html lang="zh" class="splash-active">
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>废壳韵脚生成器 v1.7.5</title>
+	<title>废壳韵脚生成器 v1.7.7</title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 	<link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -13,19 +13,128 @@
 	<link rel="preload" href="scripts/app.js" as="script" />
 	<link rel="preload" href="scripts/rhyme-engine.js" as="script" />
 	<link rel="preload" href="scripts/dict-manager.js" as="script" />
-	<link rel="preload" href="https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js" as="script" />
 
 	<link href="remixicon/remixicon.css" rel="stylesheet" />
 	<link rel="stylesheet" href="styles/main.css">
+	
+	<!-- 启动屏幕内联关键样式 - 确保即时渲染 -->
+	<style id="splash-critical-css">
+		/* 启动时隐藏滚动条，防止闪现 */
+		html.splash-active,
+		html.splash-active body {
+			overflow: hidden !important;
+			height: 100% !important;
+		}
+		
+		#splash-screen {
+			position: fixed;
+			inset: 0;
+			z-index: 9999;
+			background: linear-gradient(135deg, #1b0d22 0%, #0f0a15 100%);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			transition: opacity 0.5s ease, visibility 0.5s ease;
+		}
+		
+		#splash-screen.fade-out {
+			opacity: 0;
+			visibility: hidden;
+			pointer-events: none;
+		}
+		
+		.splash-logo {
+			font-size: 28px;
+			font-weight: 700;
+			color: #e2e8f0;
+			margin-bottom: 8px;
+			opacity: 0;
+			animation: splashFadeInUp 0.6s ease forwards;
+			font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+		}
+		
+		.splash-subtitle {
+			font-size: 12px;
+			color: #94a3b8;
+			margin-bottom: 32px;
+			opacity: 0;
+			animation: splashFadeInUp 0.6s ease 0.1s forwards;
+			font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+		}
+		
+		.splash-progress-container {
+			width: 200px;
+			height: 4px;
+			background: rgba(255, 255, 255, 0.1);
+			border-radius: 2px;
+			overflow: hidden;
+			opacity: 0;
+			animation: splashFadeInUp 0.6s ease 0.2s forwards;
+		}
+		
+		#splash-progress-bar {
+			width: 0%;
+			height: 100%;
+			background: linear-gradient(90deg, #7c3aed, #22d3ee);
+			border-radius: 2px;
+			transition: width 0.3s ease;
+		}
+		
+		#splash-status {
+			margin-top: 16px;
+			font-size: 12px;
+			color: #94a3b8;
+			opacity: 0;
+			animation: splashFadeInUp 0.6s ease 0.3s forwards;
+			font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+		}
+		
+		@keyframes splashFadeInUp {
+			from {
+				opacity: 0;
+				transform: translateY(10px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+		
+		/* 主内容初始隐藏，等待启动屏幕淡出 */
+		.shell {
+			opacity: 0;
+			visibility: hidden;
+		}
+		
+		/* 启动屏幕淡出后直接显示，不再播放动画 */
+		.shell.ready {
+			opacity: 1;
+			visibility: visible;
+		}
+	</style>
 </head>
 <body>
+	<!-- 启动屏幕 -->
+	<div id="splash-screen">
+		<div class="splash-logo">废壳韵脚生成器</div>
+		<div class="splash-subtitle">©TRUEPEAK 2026</div>
+		<div class="splash-progress-container">
+			<div id="splash-progress-bar"></div>
+		</div>
+		<div id="splash-status">正在初始化...</div>
+	</div>
+	<!-- Vanta.js 3D 背景容器 -->
+	<div id="vanta-bg"></div>
+	
+	<!-- 保留原有 blob 作为降级方案 -->
 	<div class="bg-blob blob-1"></div>
 	<div class="bg-blob blob-2"></div>
 	<div class="bg-blob blob-3"></div>
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.5</h1>
+			<h1>废壳韵脚生成器 v1.7.7</h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -235,78 +344,293 @@
 
 
 	
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js" defer></script>
-	<script src="https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.min.js" defer></script>
-	<script src="data.js" defer></script>
-	<script src="scripts/db.js" defer></script>
-	<script src="scripts/rhyme-engine.js" defer></script>
-	<script src="scripts/dict-manager.js" defer></script>
-	<script src="scripts/app.js" defer></script>
+	<!-- 启动屏幕控制器 - 必须最先加载 -->
+	<script src="scripts/splash-controller.js"></script>
+	
+	<!-- 核心本地脚本 - 同步加载确保依赖顺序 -->
+	<script src="data.js"></script>
+	<script src="scripts/db.js"></script>
+	<script src="scripts/rhyme-engine.js"></script>
+	<script src="scripts/dict-manager.js"></script>
+	<script src="scripts/visual-effects.js"></script>
+	<script src="scripts/app.js"></script>
 	
 	<script>
-		// GSAP Animations
-		window.addEventListener("load", () => {
-			console.time('gsap-init-and-run');
-			if (typeof gsap === 'undefined') return;
+		// ========================================
+		// 异步资源加载器
+		// ========================================
+		
+		/**
+		 * 异步加载单个脚本
+		 * @param {string} src - 脚本 URL
+		 * @returns {Promise}
+		 */
+		const loadScript = (src) => {
+			return new Promise((resolve, reject) => {
+				const script = document.createElement('script');
+				script.src = src;
+				script.onload = () => {
+					console.log('[Loader] 已加载:', src);
+					resolve();
+				};
+				script.onerror = () => reject(new Error(`加载失败: ${src}`));
+				document.head.appendChild(script);
+			});
+		};
+		
+		/**
+		 * Vanta.js 云雾背景初始化
+		 */
+		let vantaEffect = null;
+		
+		function initVantaBackground() {
+			if (typeof VANTA === 'undefined') {
+				console.warn('[Vanta] VANTA 未加载，使用降级背景');
+				return false;
+			}
 			
-			// Register ScrollTrigger plugin
+			try {
+				vantaEffect = VANTA.FOG({
+					el: "#vanta-bg",
+					mouseControls: true,
+					touchControls: true,
+					gyroControls: false,
+					minHeight: 200.00,
+					minWidth: 200.00,
+					highlightColor: 0x7c3aed,
+					midtoneColor: 0x2d1b4e,
+					lowlightColor: 0x1b0d22,
+					baseColor: 0x0f0a15,
+					blurFactor: 0.6,
+					speed: 1.5,
+					zoom: 1.2
+				});
+				
+				document.querySelectorAll('.bg-blob').forEach(blob => {
+					blob.style.opacity = '0';
+				});
+				
+				console.log('[Vanta] 云雾背景初始化成功');
+				return true;
+			} catch (e) {
+				console.error('[Vanta] 初始化失败:', e);
+				return false;
+			}
+		}
+		
+		/**
+		 * 初始化 GSAP 动画
+		 */
+		function initGSAPAnimations() {
+			if (typeof gsap === 'undefined') {
+				console.warn('[GSAP] GSAP 未加载');
+				return;
+			}
+			
+			console.time('gsap-init');
 			gsap.registerPlugin(ScrollTrigger);
 			
-			gsap.to(".blob-1", { x: "20%", y: "20%", duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut" });
-			gsap.to(".blob-2", { x: "-20%", y: "-20%", duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 1 });
-			gsap.to(".blob-3", { x: "15%", y: "-15%", scale: 1.2, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 2 });
-
-			// 统一设置 visibility，避免 FOUC
-			gsap.set(".shell, .panel", { visibility: "visible" });
-
-			gsap.from(".shell", { y: 30, opacity: 0, duration: 1 });
-			console.timeEnd('gsap-init-and-run');
-
+			// 如果 Vanta 加载失败，保留 blob 动画作为降级
+			if (!vantaEffect) {
+				gsap.to(".blob-1", { x: "20%", y: "20%", duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut" });
+				gsap.to(".blob-2", { x: "-20%", y: "-20%", duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 1 });
+				gsap.to(".blob-3", { x: "15%", y: "-15%", scale: 1.2, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 2 });
+			}
+			
 			// AutoAnimate integration
 			if (typeof autoAnimate !== 'undefined') {
 				const outputContainer = document.getElementById('output');
 				const badgesContainer = document.getElementById('badges');
 				const matchedList = document.getElementById('matchedResultsList');
 				
-				autoAnimate(outputContainer);
-				autoAnimate(badgesContainer);
-				autoAnimate(matchedList);
+				if (outputContainer) autoAnimate(outputContainer);
+				if (badgesContainer) autoAnimate(badgesContainer);
+				if (matchedList) autoAnimate(matchedList);
 			}
-
-			// Apply ScrollTrigger to panels
-			gsap.utils.toArray(".panel").forEach((panel, i) => {
-				gsap.from(panel, {
-					scrollTrigger: {
-						trigger: panel,
-						start: "top 90%", // 当面板顶部到达视口 90% 位置时开始
-						toggleActions: "play none none none"
-					},
-					y: 50,
-					opacity: 0,
-					duration: 0.8,
-					delay: i * 0.1,
-					ease: "power2.out"
-				});
-			});
 			
+			// 结果动画触发器
 			window.triggerResultAnimation = () => {
 				gsap.fromTo("#output", { opacity: 0.5, y: 5 }, { opacity: 1, y: 0, duration: 0.4 });
 			};
-
-			// Help Modal Logic
+			
+			console.timeEnd('gsap-init');
+		}
+		
+		/**
+		 * 初始化模态框事件
+		 */
+		function initModalEvents() {
 			const helpBtn = document.getElementById('helpTriggerBtn');
 			const helpModal = document.getElementById('helpModalOverlay');
 			const helpClose = document.getElementById('helpCloseBtn');
+			const closeAiSettings = document.getElementById('closeAiSettings');
 			
-			helpBtn.onclick = () => helpModal.classList.add('active');
-			helpClose.onclick = () => helpModal.classList.remove('active');
+			if (helpBtn && helpModal) {
+				helpBtn.onclick = () => helpModal.classList.add('active');
+			}
+			if (helpClose && helpModal) {
+				helpClose.onclick = () => helpModal.classList.remove('active');
+			}
+			if (closeAiSettings) {
+				closeAiSettings.onclick = () => {
+					document.getElementById('aiSettingsModal').classList.remove('active');
+				};
+			}
+		}
+		
+		/**
+		 * 显示主界面
+		 * 注意：不再播放入场动画，直接显示最终状态，避免闪现
+		 */
+		function showMainContent() {
+			const shell = document.querySelector('.shell');
+			if (shell) {
+				shell.classList.add('ready');
+			}
 			
-			// Close Settings Modal
-			document.getElementById('closeAiSettings').onclick = () => {
-				document.getElementById('aiSettingsModal').classList.remove('active');
-			};
+			// 设置元素为可见状态，但不播放动画
+			if (typeof gsap !== 'undefined') {
+				gsap.set(".shell, .panel", {
+					visibility: "visible",
+					opacity: 1,
+					y: 0
+				});
+			}
+		}
+		
+		// ========================================
+		// 分阶段异步加载主流程
+		// ========================================
+		
+		/**
+		 * 检查是否需要显示启动屏幕
+		 * 如果是从其他页面返回的，跳过启动屏幕
+		 */
+		function shouldShowSplash() {
+			// 检查 sessionStorage 中是否有初始化标记
+			const hasInitialized = sessionStorage.getItem('APP_INITIALIZED');
+			return !hasInitialized;
+		}
+		
+		/**
+		 * 快速初始化（跳过启动屏幕）
+		 * 用于从其他页面返回时
+		 */
+		async function quickInitialize() {
+			console.time('quick-init');
+			
+			// 立即隐藏启动屏幕
+			const splash = document.getElementById('splash-screen');
+			if (splash) splash.remove();
+			
+			// 移除 splash-active 类
+			document.documentElement.classList.remove('splash-active');
+			
+			// 显示主界面
+			const shell = document.querySelector('.shell');
+			if (shell) shell.classList.add('ready');
+			
+			try {
+				// 快速加载必要资源
+				await loadScript('https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js');
+				await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js');
+				await loadScript('https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js');
+				initVantaBackground();
+				
+				await loadScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js');
+				await loadScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js');
+				await loadScript('https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.min.js');
+				initGSAPAnimations();
+				
+				// 设置元素为可见状态
+				if (typeof gsap !== 'undefined') {
+					gsap.set(".shell, .panel", {
+						visibility: "visible",
+						opacity: 1,
+						y: 0
+					});
+				}
+				
+				initModalEvents();
+				console.timeEnd('quick-init');
+			} catch (error) {
+				console.error('[Quick Init] 初始化失败:', error);
+			}
+		}
+		
+		async function initializeApp() {
+			// 检查是否需要显示启动屏幕
+			if (!shouldShowSplash()) {
+				console.log('[Init] 检测到已初始化，跳过启动屏幕');
+				await quickInitialize();
+				return;
+			}
+			
+			console.time('total-init');
+			
+			try {
+				// 阶段 1: CSS 已加载
+				SplashController.updateProgress('CSS_LOADED');
+				await new Promise(r => setTimeout(r, 100)); // 让进度条动画显示
+				
+				// 阶段 2: 核心脚本已加载（同步脚本已执行）
+				SplashController.updateProgress('CORE_SCRIPTS');
+				await new Promise(r => setTimeout(r, 100));
+				
+				// 阶段 3: 加载 pinyin-pro
+				await loadScript('https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js');
+				SplashController.updateProgress('PINYIN_LOADED');
+				
+				// 阶段 4: 加载 Three.js + Vanta.js
+				await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js');
+				await loadScript('https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js');
+				initVantaBackground();
+				SplashController.updateProgress('VANTA_LOADED');
+				
+				// 阶段 5: 加载 GSAP + AutoAnimate
+				await loadScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js');
+				await loadScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js');
+				await loadScript('https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.min.js');
+				initGSAPAnimations();
+				SplashController.updateProgress('GSAP_LOADED');
+				
+				// 阶段 6: 词库加载（由 app.js 中的 DictManager 处理）
+				// 这里只是更新进度，实际加载在 app.js 的 init 中
+				SplashController.updateProgress('DICT_LOADED');
+				
+				// 完成
+				SplashController.updateProgress('COMPLETE');
+				
+				// 初始化模态框事件
+				initModalEvents();
+				
+				// 标记应用已初始化（在当前会话中）
+				sessionStorage.setItem('APP_INITIALIZED', 'true');
+				
+				// 延迟隐藏启动屏幕，让用户看到 100%
+				await new Promise(r => setTimeout(r, 300));
+				
+				// 隐藏启动屏幕并显示主界面
+				SplashController.hide(() => {
+					showMainContent();
+					console.timeEnd('total-init');
+				});
+				
+			} catch (error) {
+				console.error('[Init] 初始化失败:', error);
+				SplashController.showError('加载失败: ' + error.message);
+			}
+		}
+		
+		// 窗口大小变化时重新调整 Vanta
+		window.addEventListener('resize', () => {
+			if (vantaEffect) {
+				vantaEffect.resize();
+			}
 		});
+		
+		// DOM 就绪后开始异步加载
+		document.addEventListener('DOMContentLoaded', initializeApp);
 	</script>
 </body>
 </html>

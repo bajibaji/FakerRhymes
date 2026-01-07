@@ -446,29 +446,25 @@ const init = () => {
 		document.getElementById('aiSettingsModal').classList.remove('active');
 	});
 
-	// 脚本加载
-	const cdnList = ['https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js'];
-	const loadScripts = (list) => {
-		if (!list.length) return;
-		console.time('pinyin-pro-load');
-		const s = document.createElement('script');
-		s.src = list.shift();
-		s.onload = () => {
-			console.timeEnd('pinyin-pro-load');
+	// pinyin-pro 由 index.html 异步加载器加载
+	// 等待 pinyin-pro 加载完成后初始化
+	const waitForPinyinPro = () => {
+		if (window.pinyinPro && window.pinyinPro.pinyin) {
 			pinyinReady = true;
+			console.log('[App] pinyin-pro 已就绪');
 			console.time('register-bank');
 			DictManager.setBankMap(DictManager.registerBank());
 			console.timeEnd('register-bank');
-		};
-		document.head.appendChild(s);
+		} else {
+			// 每 100ms 检查一次
+			setTimeout(waitForPinyinPro, 100);
+		}
 	};
-	loadScripts(cdnList);
+	waitForPinyinPro();
 
-	// 延迟首帧后再启动初始字典加载，避免阻塞动画
-	let initialDictScheduled = false;
+	// 词库加载由 index.html 异步加载器触发
+	// 这里只需要在 DictManager 可用时延迟加载
 	const scheduleInitialDictLoad = () => {
-		if (initialDictScheduled) return;
-		initialDictScheduled = true;
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {
 				setTimeout(() => {
@@ -476,11 +472,18 @@ const init = () => {
 					DictManager.loadDict().then(() => {
 						console.timeEnd('initial-load-dict');
 					});
-				}, 200); // 允许首屏动画完成
+				}, 200);
 			});
 		});
 	};
-	window.addEventListener('load', scheduleInitialDictLoad);
+	
+	// 如果启动屏幕已隐藏，立即加载词库
+	if (!window.SplashController || !window.SplashController.isVisible()) {
+		scheduleInitialDictLoad();
+	} else {
+		// 否则等待启动屏幕隐藏后加载
+		window.addEventListener('load', scheduleInitialDictLoad);
+	}
 	// 初始化词库状态
 	if (DictManager) {
 		(async () => {
@@ -505,5 +508,10 @@ const init = () => {
 
 window.addEventListener('DOMContentLoaded', () => {
 	init();
+	
+	// 初始化高级视觉效果
+	if (window.VisualEffects) {
+		window.VisualEffects.init();
+	}
 });
 })();

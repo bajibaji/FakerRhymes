@@ -13,6 +13,17 @@
 	--accent-2: #22d3ee;
 	--border: #1f2937;
 	--radius: 16px;
+	
+	/* 毛玻璃效果变量 */
+	--glass-bg: rgba(17, 24, 39, 0.75);
+	--glass-blur: 20px;
+	--glass-saturate: 180%;
+	--glass-border: rgba(255, 255, 255, 0.08);
+	--glass-highlight: rgba(255, 255, 255, 0.05);
+	
+	/* 光效跟随变量 */
+	--spotlight-size: 600px;
+	--spotlight-color: rgba(124, 58, 237, 0.15);
 }
 
 /* Reset & Base */
@@ -35,13 +46,20 @@ body {
 	padding: 40px 16px 64px;
 }
 
-/* Shell Container */
+/* Shell Container - 毛玻璃效果增强 */
 .shell {
 	width: min(1000px, 100%);
-	background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
-	border: 1px solid var(--border);
+	/* 毛玻璃核心属性 */
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+	/* 高光边框 */
+	border: 1px solid var(--glass-border);
+	border-top: 1px solid var(--glass-highlight);
 	border-radius: var(--radius);
-	box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+	box-shadow:
+		0 30px 80px rgba(0, 0, 0, 0.35),
+		inset 0 1px 0 var(--glass-highlight);
 	overflow: hidden;
 }
 
@@ -85,22 +103,44 @@ main {
 	margin: 0;
 }
 
-/* Panel */
+/* Panel - 毛玻璃 + 光效跟随 */
 .panel {
-	background: var(--panel);
-	border: 1px solid var(--border);
+	/* 毛玻璃效果 */
+	background: rgba(17, 24, 39, 0.6);
+	backdrop-filter: blur(12px) saturate(150%);
+	-webkit-backdrop-filter: blur(12px) saturate(150%);
+	border: 1px solid var(--glass-border);
 	border-radius: calc(var(--radius) - 4px);
 	padding: 20px;
 	position: relative;
 	overflow: hidden;
+	/* 光效跟随 CSS 变量 */
+	--spotlight-x: 50%;
+	--spotlight-y: 50%;
+	/* GPU 加速 */
+	will-change: transform;
+	transform: translateZ(0);
 }
 
+/* 动态光效跟随 */
 .panel::before {
 	content: "";
 	position: absolute;
 	inset: 0;
-	background: radial-gradient(circle at 30% 30%, rgba(124, 58, 237, 0.08), transparent 40%);
+	background: radial-gradient(
+		var(--spotlight-size) circle at var(--spotlight-x) var(--spotlight-y),
+		var(--spotlight-color),
+		transparent 40%
+	);
 	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+}
+
+/* 鼠标悬停时显示光效 */
+.panel:hover::before,
+.panel.spotlight-active::before {
+	opacity: 1;
 }
 
 /* Form Elements */
@@ -452,7 +492,18 @@ th {
 	font-size: 12px;
 }
 
-/* Background Blobs */
+/* Vanta.js 3D 背景容器 */
+#vanta-bg {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	z-index: -2;
+	pointer-events: none;
+}
+
+/* Background Blobs - 作为 Vanta 降级方案 */
 .bg-blob {
 	position: fixed;
 	border-radius: 50%;
@@ -462,11 +513,12 @@ th {
 	pointer-events: none;
 	will-change: transform, opacity;
 	transform: translateZ(0);
+	transition: opacity 0.5s ease;
 }
 
-/* 初始隐藏需要动画的元素，防止 FOUC */
+/* 初始状态 - 移除 visibility:hidden 避免内容不可见 */
 .shell, .panel {
-	visibility: hidden;
+	visibility: visible;
 }
 
 .blob-1 { 
@@ -518,27 +570,34 @@ main, .panel, textarea, input[type="text"], .footer {
 
 /* 启动动画 */
 .shell {
-	opacity: 0;
-	transform: translateY(12px);
+	opacity: 1;
+	transform: translateY(0);
 	animation: shellFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
 	will-change: opacity, transform;
 }
 
 @keyframes shellFadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
 	to {
 		opacity: 1;
 		transform: translateY(0);
 	}
 }
 
+
 /* ========================================
-   Modal Styles
+   Modal Styles - 增强过渡效果
    ======================================== */
 .modal-overlay {
 	position: fixed;
 	inset: 0;
 	background: rgba(0, 0, 0, 0.6);
-	backdrop-filter: blur(4px);
+	/* 增强毛玻璃效果 */
+	backdrop-filter: blur(8px) saturate(150%);
+	-webkit-backdrop-filter: blur(8px) saturate(150%);
 	z-index: 2000;
 	display: flex;
 	align-items: center;
@@ -554,18 +613,29 @@ main, .panel, textarea, input[type="text"], .footer {
 }
 
 .modal {
-	background: var(--panel);
-	border: none;
+	/* 毛玻璃背景 */
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+	border: 1px solid var(--glass-border);
 	border-radius: var(--radius);
 	width: min(700px, 92vw);
 	max-height: 85vh;
 	overflow-y: auto;
 	padding: 32px;
-	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-	transform: translateY(20px);
-	transition: transform 0.3s ease;
+	box-shadow:
+		0 20px 50px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 var(--glass-highlight);
+	/* 增强过渡动画 - 惯性效果 */
+	transform: translateY(30px) scale(0.95);
+	opacity: 0;
+	transition:
+		transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+		opacity 0.3s ease;
 	-ms-overflow-style: none;
 	scrollbar-width: none;
+	/* GPU 加速 */
+	will-change: transform, opacity;
 }
 
 .modal::-webkit-scrollbar {
@@ -573,7 +643,8 @@ main, .panel, textarea, input[type="text"], .footer {
 }
 
 .modal-overlay.active .modal {
-	transform: translateY(0);
+	transform: translateY(0) scale(1);
+	opacity: 1;
 }
 
 .modal-header {
@@ -935,5 +1006,55 @@ select {
 	background-color: var(--panel);
 	color: var(--text);
 	padding: 10px;
+}
+
+/* ========================================
+   高级视觉效果 - 边框光晕
+   ======================================== */
+.glow-border {
+	position: absolute;
+	inset: -1px;
+	border-radius: inherit;
+	pointer-events: none;
+	background: radial-gradient(
+		300px circle at var(--glow-x, 50%) var(--glow-y, 50%),
+		rgba(124, 58, 237, 0.4),
+		transparent 50%
+	);
+	mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	mask-composite: xor;
+	-webkit-mask-composite: xor;
+	padding: 1px;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+}
+
+.panel:hover .glow-border {
+	opacity: 1;
+}
+
+/* ========================================
+   减少动画偏好支持
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+	.panel::before,
+	.glow-border,
+	.bg-blob {
+		animation: none !important;
+		transition: none !important;
+	}
+	
+	.shell,
+	.modal,
+	.panel {
+		animation: none !important;
+		transition: opacity 0.1s ease !important;
+	}
+	
+	.modal-overlay.active .modal {
+		transform: translateY(0) scale(1);
+	}
 }
 
