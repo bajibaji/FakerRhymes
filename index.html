@@ -2460,17 +2460,19 @@
 					select.className = 'tone-select';
 					select.dataset.index = index;
 					
-					const opt0 = document.createElement('option');
-					opt0.value = '';
-					opt0.textContent = '原';
-					opt0.selected = i.forcedTone === null;
-					select.appendChild(opt0);
+					const toneSymbols = {
+						1: '一',
+						2: '／',
+						3: 'V',
+						4: '＼'
+					};
 					
 					for (let tone = 1; tone <= 4; tone++) {
 						const opt = document.createElement('option');
 						opt.value = tone;
-						opt.textContent = tone;
-						opt.selected = i.forcedTone == tone;
+						opt.textContent = toneSymbols[tone];
+						// 只要当前音调等于该选项，就选中
+						opt.selected = i.tone == tone;
 						select.appendChild(opt);
 					}
 					
