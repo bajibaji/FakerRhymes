@@ -2,49 +2,60 @@
 <html lang="zh">
 <head>
 	<meta charset="UTF-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>废壳韵脚生成器 v1.7.3 </title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+	<title>废壳韵脚生成器 v1.7.4 </title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
+	<link rel="manifest" href="manifest.json" />
 	<style>
 		:root {
-			--bg: #1b0d22;
-			--panel: #111827;
-			--card: #0b1220;
-			--text: #e2e8f0;
+			--bg: #0f0518;
+			--panel: rgba(17, 24, 39, 0.6);
+			--card: rgba(11, 18, 32, 0.5);
+			--text: #f1f5f9;
 			--muted: #94a3b8;
-			--accent: #7c3aed;
-			--accent-2: #22d3ee;
-			--border: #1f2937;
-			--radius: 16px;
+			--accent: #8b5cf6;
+			--accent-2: #06b6d4;
+			--border: rgba(255, 255, 255, 0.08);
+			--radius: 20px;
+			--shadow-color: rgba(0, 0, 0, 0.4);
 		}
 
 		* {
 			box-sizing: border-box;
+			-webkit-tap-highlight-color: transparent; /* Mobile optimization */
 		}
 
 		body {
 			margin: 0;
 			min-height: 100vh;
-			background: radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.2), transparent 35%),
-				radial-gradient(circle at 80% 10%, rgba(34, 211, 238, 0.2), transparent 30%),
-				radial-gradient(circle at 50% 80%, rgba(56, 189, 248, 0.15), transparent 35%),
-				var(--bg);
+			background-color: var(--bg);
+			background-image: 
+				radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.15) 0px, transparent 50%),
+				radial-gradient(at 100% 0%, rgba(34, 211, 238, 0.15) 0px, transparent 50%),
+				radial-gradient(at 100% 100%, rgba(124, 58, 237, 0.15) 0px, transparent 50%),
+				radial-gradient(at 0% 100%, rgba(34, 211, 238, 0.15) 0px, transparent 50%);
 			color: var(--text);
 			font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			padding: 40px 16px 64px;
+			overflow-x: hidden;
 		}
 
 		.shell {
 			width: min(1000px, 100%);
-			background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+			background: rgba(255, 255, 255, 0.03);
+			backdrop-filter: blur(24px);
+			-webkit-backdrop-filter: blur(24px);
 			border: 1px solid var(--border);
+			border-top: 1px solid rgba(255, 255, 255, 0.15);
 			border-radius: var(--radius);
-			box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+			box-shadow: 0 30px 80px -12px var(--shadow-color);
 			overflow: hidden;
+			position: relative;
+			padding-bottom: env(safe-area-inset-bottom);
 		}
 
 		header {
@@ -109,21 +120,38 @@
 				padding: 16px;
 			}
 			.btn {
-				padding: 10px 16px;
-				font-size: 14px;
+				padding: 12px 16px;
+				font-size: 15px;
 			}
 			.btn.small {
-				padding: 6px 10px;
-				font-size: 12px;
+				padding: 8px 12px;
+				font-size: 13px;
 			}
+			
+			/* Make the main button more prominent on mobile */
+			#go {
+				width: 100%;
+				margin-bottom: 8px;
+				font-size: 16px;
+				padding: 14px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+			}
+			
+			#go::before {
+				content: "✨";
+			}
+
 			textarea,
 			input[type="text"] {
 				padding: 12px;
-				font-size: 15px; /* 防止iOS缩放 */
+				font-size: 16px; /* Prevent iOS zoom */
 				min-height: 100px;
 			}
 			.controls {
-				gap: 6px;
+				gap: 10px;
 			}
 			table {
 				font-size: 12px;
@@ -141,9 +169,12 @@
 			background: var(--panel);
 			border: 1px solid var(--border);
 			border-radius: calc(var(--radius) - 4px);
-			padding: 20px;
+			padding: 24px;
 			position: relative;
 			overflow: hidden;
+			backdrop-filter: blur(12px);
+			-webkit-backdrop-filter: blur(12px);
+			box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 		}
 
 		.panel::before {
@@ -246,10 +277,15 @@
 			font-weight: 700;
 			cursor: pointer;
 			/* 移除 transform transition，避免与 GSAP 冲突 */
-			transition: box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+			transition: box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease, transform 0.1s ease;
 			box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
 			position: relative;
 			overflow: hidden;
+			touch-action: manipulation; /* 禁止双击缩放，提升点击响应速度 */
+		}
+
+		.btn:active {
+			transform: scale(0.96); /* 点击时的按压反馈 */
 		}
 
 		/* 移除 CSS hover transform，完全交给 GSAP */
@@ -344,33 +380,38 @@
 		/* 手机端更多匹配结果优化 */
 		@media (max-width: 600px) {
 			.match-grid {
-				grid-template-columns: repeat(4, 1fr);
-				gap: 6px;
+				grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+				gap: 6px 6px; /* 进一步缩小行列间距 */
 			}
 			
 			.match-item {
-				padding: 6px 4px;
-				font-size: 13px;
+				padding: 6px 4px; /* 减小内边距 */
+				font-size: 14px;
 				border-radius: 6px;
+				white-space: normal;
+				height: auto;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				min-height: 32px; /* 降低最小高度 */
+				line-height: 1.2;
 			}
 			
 			.match-item[data-length="4"] {
-				font-size: 12px;
-				letter-spacing: -0.3px;
+				font-size: 13px;
 			}
 			
 			.match-item[data-length="5"],
 			.match-item[data-length="6"],
 			.match-item[data-length="7"] {
-				font-size: 11px;
-				letter-spacing: -0.5px;
+				font-size: 12px;
 			}
 		}
 		
-		/* 超小屏幕（宽度小于360px）显示3列 */
+		/* 超小屏幕优化 */
 		@media (max-width: 360px) {
 			.match-grid {
-				grid-template-columns: repeat(3, 1fr);
+				grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
 			}
 		}
 
@@ -613,11 +654,6 @@
 			width: 100%;
 		}
 
-		/* Virtual List Styles removed as per user feedback */
-		#matchedResultsList {
-			/* 使用 match-grid 类的样式 */
-		}
-
 		.virtual-item {
 			padding: 6px 12px;
 			background: var(--card);
@@ -830,7 +866,7 @@
 			font-size: 48px;
 			margin-bottom: 24px;
 			background: linear-gradient(135deg, var(--accent), var(--accent-2));
-			-webkit-background-clip: text;
+			
 			-webkit-text-fill-color: transparent;
 			font-weight: 800;
 			letter-spacing: -1px;
@@ -874,7 +910,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 v1.7.3<span style="font-size: 0.5em;">[网页版]</span></h1>
+			<h1>废壳韵脚生成器 v1.7.4<span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动提取拼音、声调与韵母，生成每个字同声调同韵母的押韵字串。</p>
 		</header>
@@ -885,10 +921,10 @@
 					<label for="source">请输入要押韵的词语：</label>
 					<a class="btn ghost small" href="custom.html"><i class="ri-file-list-3-line"></i>自定义词库</a>
 				</div>
-				<textarea id="source" placeholder="示例：废壳"></textarea>
+				<textarea id="source" placeholder="示例：废壳" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="search" spellcheck="false"></textarea>
 
 				<div class="controls" style="display: flex; flex-direction: column; gap: 1px; margin-top: 12px;">
-					<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+					<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
 						<button class="btn" id="go">生成押韵</button>
 						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
 					</div>
@@ -1087,7 +1123,12 @@
 			});
 			btn.addEventListener("mouseup", () => {
 				gsap.to(btn, { scale: 1.05, duration: 0.4, ease: "elastic.out(1, 0.3)" });
+				if (navigator.vibrate) navigator.vibrate(10); // Haptic feedback
 			});
+			// Add touch start feedback for mobile
+			btn.addEventListener("touchstart", () => {
+				if (navigator.vibrate) navigator.vibrate(5);
+			}, { passive: true });
 		});
 		
 		// Animate output when generated
@@ -1106,6 +1147,13 @@
 					clearProps: "all"
 				});
 			}, 50);
+
+			// Mobile: Scroll to result
+			if (window.innerWidth <= 900) {
+				setTimeout(() => {
+					document.querySelector('.panel:nth-of-type(2)').scrollIntoView({ behavior: 'smooth', block: 'start' });
+				}, 100);
+			}
 		};
 
 		const goBtn = document.getElementById('go');
@@ -2456,10 +2504,16 @@
 
 				const worker = new Worker('./dict-worker.js');
 				worker.onmessage = async (event) => {
-					const { type, message, data, percent, progress } = event.data;
+					const { type, message, data, percent, progress, loaded } = event.data;
 
 					if (type === 'progress') {
 						btn.textContent = `${message} ${percent ? percent + '%' : ''}`;
+					} else if (type === 'download_progress') {
+						if (percent !== undefined) {
+							btn.innerHTML = `<i class="ri-download-cloud-2-line"></i> 下载中: ${percent}%`;
+						} else {
+							btn.innerHTML = `<i class="ri-download-cloud-2-line"></i> 下载中: ${loaded}`;
+						}
 					} else if (type === 'parsing') {
 						btn.textContent = `解析存储中: ${progress || 0}%`;
 					} else if (type === 'success') {
@@ -2637,7 +2691,10 @@
 			
 			// 键盘快捷键
 			sourceInput.addEventListener('keydown', (e) => {
-				if (e.ctrlKey && e.key === 'Enter') process();
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault(); // 阻止换行
+					process();
+				}
 			});
 
 			const loosenInput = document.getElementById('looseness');
@@ -2871,7 +2928,8 @@
 		init();
 	</script>
 	<script>
-		if ('serviceWorker' in navigator) {
+		// 在本地开发环境（localhost/127.0.0.1）不注册 Service Worker，避免干扰 Live Preview
+		if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
 			window.addEventListener('load', () => {
 				navigator.serviceWorker.register('./service-worker.js').catch((err) => {
 					console.warn('Service worker registration failed', err);

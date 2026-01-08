@@ -100,7 +100,46 @@ self.onmessage = async function(event) {
           const response = await fetch(source.url);
           if (!response.ok) throw new Error('HTTP ' + response.status);
 
-          let jsonStr = await response.text();
+          const contentLength = response.headers.get('Content-Length');
+          if (!contentLength) {
+            self.postMessage({ type: 'progress', message: '正在加载资源(大小未知)...' });
+          }
+
+          const total = parseInt(contentLength, 10);
+          let loaded = 0;
+
+          const reader = response.body.getReader();
+          const chunks = [];
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            chunks.push(value);
+            loaded += value.length;
+
+            if (total) {
+              const percent = Math.round((loaded / total) * 100);
+              // Report progress every few percent or based on time to avoid flooding,
+              // but for now, simple throttle or direct report is okay.
+              // Let's report only if percent changed significantly to avoid message spam
+              self.postMessage({
+                type: 'download_progress',
+                percent: percent,
+                message: '下载中'
+              });
+            } else {
+               self.postMessage({
+                type: 'download_progress',
+                loaded: (loaded / 1024 / 1024).toFixed(1) + 'MB',
+                message: '下载中'
+              });
+            }
+          }
+
+          // Concatenate chunks and decode
+          const blob = new Blob(chunks);
+          let jsonStr = await blob.text();
           
           self.postMessage({ type: 'progress', message: '资源加载完成，极速解析中...' });
           let data = JSON.parse(jsonStr);

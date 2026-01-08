@@ -1,5 +1,10 @@
 const CACHE_NAME = 'fakerhymes-cache-v1';
 const ASSETS = [
+  './',
+  './index.html',
+  './custom.html',
+  './data.js',
+  './manifest.json',
   './dict_optimized.json'
 ];
 
@@ -26,28 +31,21 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // 对页面导航（HTML）使用网络优先，确保打开页面时尽量获取最新内容
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
-
-  // 其他资源仍使用缓存优先（cache-first）策略
+  // 全部改为网络优先（Network-First）策略
+  // 优先尝试网络请求，获取最新版本并更新缓存；如果网络断开，则回退到缓存
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request)
+    fetch(request)
       .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
       })
-      .catch(() => caches.match('./index.html')))
+      .catch(() => {
+        // 网络请求失败，尝试从缓存读取
+        if (request.mode === 'navigate') {
+           return caches.match(request).then((cached) => cached || caches.match('./index.html'));
+        }
+        return caches.match(request);
+      })
   );
 });
