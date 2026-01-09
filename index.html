@@ -1326,8 +1326,8 @@
 		</div>
 	</div>
 
-	<script src="./data.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" onerror="console.warn('GSAP CDN加载失败')"></script>
+	<script src="./data.js" defer></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer onerror="console.warn('GSAP CDN加载失败')"></script>
 	<script>
 		// 开发模式开关（生产环境设为false以禁用console.log）
 		const DEV_MODE = false;
@@ -1519,15 +1519,6 @@
 			});
 		}
 
-		// 极速获取数据函数
-		async function getFromDB(key) {
-			// 优先从内存 Map 中获取，这是毫秒级的
-			if (globalDictData && globalDictData.has(key)) {
-				return globalDictData.get(key);
-			}
-			return null;
-		}
-
 		async function getAllKeysFromDB() {
 			const db = await openDB();
 			return new Promise((resolve, reject) => {
@@ -1664,15 +1655,6 @@
 						if (!suffixIndex.has(suffix)) suffixIndex.set(suffix, []);
 						suffixIndex.get(suffix).push(encoded);
 					}
-				}
-				
-				// 🔍 DEBUG: 索引构建验证
-				console.log('=== DEBUG: 索引构建验证 ===');
-				console.log('Total entries:', globalDictData.size);
-				console.log('Total suffixIndex keys:', suffixIndex.size);
-				if (suffixIndex.size > 0) {
-					const firstKey = suffixIndex.keys().next().value;
-					console.log('Sample suffix key:', firstKey, 'Count:', suffixIndex.get(firstKey).length);
 				}
 				
 				// --- 核心修复：重建索引供长词匹配查询使用 ---
@@ -1929,18 +1911,6 @@
 			
 			// 优化方案：移动端优先，只使用精准哈希查询
 			for (const qk of queryVariantSet) {
-			// 🔍 DEBUG: 深度诊断
-			console.log('=== DEBUG: 深度诊断 ===');
-			console.log('1. qk:', qk, 'Length:', qk.length);
-			if (qk.length >= 2) {
-				const suffix = qk.slice(-2);
-				const longerKeys = suffixIndex.get(suffix) || [];
-				console.log('2. suffix:', suffix, 'Found keys in suffixIndex:', longerKeys.length);
-				if (longerKeys.length > 0) {
-					console.log('3. Sample longer key:', longerKeys[0], 'Ends with qk?', longerKeys[0].endsWith(qk));
-				}
-			}
-
 			// 1. 精确匹配（相同长度）
 			const candidates = await getFromDB(qk);
 				if (candidates && Array.isArray(candidates)) {
