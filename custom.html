@@ -250,7 +250,8 @@
       <button class="btn" id="save" type="button" onclick="handleSave()">保存到浏览器</button>
       <button class="btn ghost" id="clear" type="button" onclick="handleClear()">清空自定义</button>
       <button class="btn ghost" id="back" type="button" onclick="location.href='index.html'">返回生成器</button>
-      <button class="btn ghost" id="export" type="button" onclick="handleExport()">导出 data.js 片段</button>
+      <button class="btn ghost" id="export" type="button" onclick="handleExport()">导出到剪切板</button>
+      <button class="btn ghost" id="import" type="button" onclick="handleImport()">从剪切板导入</button>
     </div>
 
     <div class="list" id="current"></div>
@@ -282,7 +283,7 @@
 
     const parseInput = (text) => {
       return text
-        .replace(/[，,；;\n\r\t]+/g, ' ')
+        .replace(/[，,；;、\n\r\t]+/g, ' ')
         .split(' ')
         .map((s) => s.trim())
         .filter(Boolean);
@@ -294,7 +295,16 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return [];
         const arr = JSON.parse(raw);
-        return Array.isArray(arr) ? arr.filter(Boolean) : [];
+        if (!Array.isArray(arr)) return [];
+        // 过滤掉无效词条（旧版本可能误存入的代码片段）
+        const invalidPatterns = /^(\/\/|const|customBank|data\.js|追加到|中的|\[|\]|\{|\}|=|;|'|"|`)/;
+        return arr.filter(w => {
+          if (!w || typeof w !== 'string') return false;
+          const trimmed = w.trim();
+          if (!trimmed) return false;
+          if (invalidPatterns.test(trimmed)) return false;
+          return true;
+        });
       } catch (e) {
         status('读取 localStorage 失败，改用内存存储。');
         return [...memoryStore];
@@ -334,17 +344,21 @@
       const text = document.getElementById('input').value;
       const parts = parseInput(text);
       if (!parts.length) {
-        alert('请输入至少一个词/字');
+        showToast('请输入至少一个词/字');
         return;
       }
       saveList(parts.concat(loadList()));
       document.getElementById('input').value = '';
       renderList();
-      alert('已保存到浏览器，返回主页即可生效');
+      alert('已保存 ' + parts.length + ' 个词到浏览器');
     }
 
     function handleClear() {
-      console.log('清空按钮被点击');
+      const list = loadList();
+      if (!list.length) {
+        alert('当前无自定义词');
+        return;
+      }
       if (!confirm('确认清空自定义词库？')) return;
       if (storageAvailable()) localStorage.removeItem(STORAGE_KEY);
       memoryStore = [];
@@ -353,17 +367,34 @@
     }
 
     function handleExport() {
-      console.log('导出按钮被点击');
       const list = loadList();
       const box = document.getElementById('exportBox');
       if (!list.length) {
         box.style.display = 'block';
         box.textContent = '当前无自定义词可导出。';
+        alert('当前无自定义词可导出');
         return;
       }
-      const snippet = '// 追加到 data.js 中的 customBank\nconst customBank = [\n  \'' + list.join('\',\n  \'') + '\'\n];';
-      box.style.display = 'block';
-      box.textContent = snippet;
+      // 用换行分隔导出
+      const exportText = list.join('\n');
+      navigator.clipboard.writeText(exportText).then(() => {
+        box.style.display = 'block';
+        box.textContent = '已复制到剪切板：' + list.join('、');
+        alert('已导出 ' + list.length + ' 个词到剪切板');
+      });
+    }
+
+    function handleImport() {
+      const inputBox = document.getElementById('input');
+      navigator.clipboard.readText().then(clipText => {
+        if (clipText && clipText.trim()) {
+          inputBox.value = clipText;
+          inputBox.focus();
+          alert('已粘贴到输入框，点击"保存到浏览器"确认');
+        } else {
+          alert('剪切板为空');
+        }
+      });
     }
 
     const init = () => {
@@ -384,6 +415,7 @@
       init();
     }
   </script>
+  <script src="data.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script>
     // GSAP Animations
