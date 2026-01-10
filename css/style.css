@@ -1,4 +1,4 @@
-:root {
+﻿:root {
       --bg: #0f0518;
       --panel: rgba(17, 24, 39, 0.6);
       --card: rgba(11, 18, 32, 0.5);
@@ -80,6 +80,13 @@
       z-index: 1;
     }
 
+    @media (max-width: 600px) {
+      .shell {
+        padding: 16px 8px 12px;
+        border-radius: 16px;
+      }
+    }
+
     .shell::before {
       content: "";
       position: absolute;
@@ -142,7 +149,7 @@
       font-family: var(--font-display);
       letter-spacing: 0.2px;
       cursor: pointer;
-      /* 移除 transform transition，避免与 GSAP 冲突 */
+      /* 绉婚櫎 transform transition锛岄伩鍏嶄笌 GSAP 鍐茬獊 */
       transition: box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease, transform 0.1s ease;
       box-shadow:
         0 16px 34px rgba(124, 58, 237, 0.22),
@@ -170,7 +177,7 @@
       transform: scale(0.96);
     }
 
-    /* 移除 CSS hover transform，完全交给 GSAP */
+    /* 绉婚櫎 CSS hover transform锛屽畬鍏ㄤ氦缁?GSAP */
     .btn:hover {
       border-color: rgba(255, 255, 255, 0.16);
       box-shadow:
@@ -179,12 +186,12 @@
         0 1px 0 rgba(255, 255, 255, 0.16) inset;
     }
 
-    /* 布局平滑过渡 */
+    /* 甯冨眬骞虫粦杩囨浮 */
     .shell, textarea, .list, .export-box, .footer {
       transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    /* 背景色块，避免遮挡主体 */
+    /* 鑳屾櫙鑹插潡锛岄伩鍏嶉伄鎸′富浣?*/
     .bg-blob {
       position: fixed;
       border-radius: 50%;
@@ -378,7 +385,7 @@
 			padding: 0 32px 28px;
 		}
 
-		/* 让下面的 section 也使用相同的宽度对齐 */
+		/* 璁╀笅闈㈢殑 section 涔熶娇鐢ㄧ浉鍚岀殑瀹藉害瀵归綈 */
 		.shell > section {
 			margin: 0 32px 20px 32px;
 		}
@@ -395,19 +402,19 @@
 
 		@media (max-width: 600px) {
 			body {
-				padding: 20px 12px 40px;
+				padding: 20px 4px 40px;
 			}
 			header {
-				padding: 20px 20px 8px;
+				padding: 12px 8px 8px;
 			}
 			h1 {
 				font-size: 24px;
 			}
 			main {
-				padding: 0 20px 20px;
+				padding: 0 8px 16px;
 			}
 			.panel {
-				padding: 16px;
+				padding: 8px;
 			}
 			.btn {
 				padding: 12px 16px;
@@ -602,7 +609,7 @@
 			font-family: var(--font-display);
 			letter-spacing: 0.2px;
 			cursor: pointer;
-			/* 移除 transform transition，避免与 GSAP 冲突 */
+			/* 绉婚櫎 transform transition锛岄伩鍏嶄笌 GSAP 鍐茬獊 */
 			transition: box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease, transform 0.1s ease;
 			box-shadow:
 				0 16px 34px rgba(124, 58, 237, 0.22),
@@ -610,7 +617,7 @@
 				0 1px 0 rgba(255, 255, 255, 0.14) inset;
 			position: relative;
 			overflow: hidden;
-			touch-action: manipulation; /* 禁止双击缩放，提升点击响应速度 */
+			touch-action: manipulation; /* 绂佹鍙屽嚮缂╂斁锛屾彁鍗囩偣鍑诲搷搴旈€熷害 */
 		}
 
 		.btn::before {
@@ -623,10 +630,10 @@
 		}
 
 		.btn:active {
-			transform: scale(0.96); /* 点击时的按压反馈 */
+			transform: scale(0.96); /* 鐐瑰嚮鏃剁殑鎸夊帇鍙嶉 */
 		}
 
-		/* 移除 CSS hover transform，完全交给 GSAP */
+		/* 绉婚櫎 CSS hover transform锛屽畬鍏ㄤ氦缁?GSAP */
 		.btn:hover {
 			border-color: rgba(255, 255, 255, 0.16);
 			box-shadow:
@@ -635,7 +642,7 @@
 				0 1px 0 rgba(255, 255, 255, 0.16) inset;
 		}
 
-		/* 布局平滑过渡 */
+		/* 甯冨眬骞虫粦杩囨浮 */
 		.shell, main, .panel, textarea, input[type="text"], .footer {
 			transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 		}
@@ -750,15 +757,15 @@
 			letter-spacing: -1px;
 		}
 
-		/* 手机端更多匹配结果优化 */
+		/* 鎵嬫満绔洿澶氬尮閰嶇粨鏋滀紭鍖?*/
 		@media (max-width: 600px) {
 			.match-grid {
 				grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
-				gap: 6px 6px; /* 进一步缩小行列间距 */
+				gap: 6px 6px; /* 杩涗竴姝ョ缉灏忚鍒楅棿璺?*/
 			}
 			
 			.match-item {
-				padding: 6px 4px; /* 减小内边距 */
+				padding: 6px 4px; /* 鍑忓皬鍐呰竟璺?*/
 				font-size: 14px;
 				border-radius: 6px;
 				white-space: normal;
@@ -766,7 +773,7 @@
 				display: flex;
 				align-items: center;
 				justify-content: center;
-				min-height: 32px; /* 降低最小高度 */
+				min-height: 32px; /* 闄嶄綆鏈€灏忛珮搴?*/
 				line-height: 1.2;
 			}
 			
@@ -781,7 +788,7 @@
 			}
 		}
 		
-		/* 超小屏幕优化 */
+		/* 瓒呭皬灞忓箷浼樺寲 */
 		@media (max-width: 360px) {
 			.match-grid {
 				grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
@@ -1186,7 +1193,7 @@
 			box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
 		}
 
-		/* 最松按钮特殊样式 - 紫红渐变 */
+		/* 鏈€鏉炬寜閽壒娈婃牱寮?- 绱孩娓愬彉 */
 		.segment-btn[data-value="1"].active {
 			background: linear-gradient(135deg, #a855f7, #ec4899);
 			box-shadow: 0 2px 8px rgba(236, 72, 153, 0.4);
