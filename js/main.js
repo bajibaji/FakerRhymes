@@ -262,6 +262,11 @@ const cdnList = [
 				rest = 'ie';
 			}
 
+			// 特殊处理：y 后的 an 实际是 ian (yan -> ian)
+			if (initial === 'y' && rest === 'an') {
+				rest = 'ian';
+			}
+
 			// --- 新增：i韵隔离协议 (Triple-I Isolation) ---
 			if (rest === 'i') {
 				if (['z', 'c', 's'].includes(initial)) {
