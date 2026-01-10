@@ -114,8 +114,11 @@
 			const matchedResults = document.getElementById('matchedResults');
 			const items = document.querySelectorAll('#matchedResultsList .match-item');
 			if (matchedResults && matchedResults.style.display !== 'none' && items.length) {
-				gsap.fromTo(matchedResults, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', clearProps: 'all' });
-				gsap.fromTo(items, { opacity: 0, y: 8, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, stagger: 0.03, ease: 'power2.out', clearProps: 'transform' });
+				const itemCount = items.length;
+				const fastStagger = itemCount > 99 ? 0 : Math.min(0.02, 0.6 / Math.max(itemCount, 1));
+				const itemDuration = itemCount > 35 ? 0.18 : 0.25;
+				gsap.fromTo(matchedResults, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, ease: 'power2.out', clearProps: 'all' });
+				gsap.fromTo(items, { opacity: 0, y: 8, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: itemDuration, stagger: fastStagger, ease: 'power2.out', clearProps: 'transform' });
 			}
 
 			// Mobile: Scroll to result
