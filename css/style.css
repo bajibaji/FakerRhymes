@@ -80,10 +80,17 @@
       z-index: 1;
     }
 
+    .custom-page .shell {
+      padding: 32px 32px 16px;
+    }
+
     @media (max-width: 600px) {
       .shell {
         padding: 8px 2px 8px;
         border-radius: 16px;
+      }
+      .custom-page .shell {
+        padding: 20px 16px 16px;
       }
     }
 
@@ -225,10 +232,97 @@
     }
 
     .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
-    .list { margin-top: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-height: 80px; }
+    .list-container {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--border), transparent);
+      margin: 32px 0 8px;
+    }
+    .list-container h3 {
+      margin: 0;
+      font-size: 15px;
+      color: var(--accent-2);
+      font-family: var(--font-display);
+      font-weight: 600;
+    }
+    .list {
+      background: rgba(10, 14, 26, 0.6) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 120px;
+      max-height: 300px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--accent) transparent;
+      z-index: 20;
+      position: relative;
+    }
+    .list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .list::-webkit-scrollbar-thumb {
+      background: var(--accent);
+      border-radius: 10px;
+    }
     .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(34, 211, 238, 0.12); color: #a5f3fc; border: 1px solid rgba(34, 211, 238, 0.35); margin: 4px; font-size: 13px; }
     .footer { color: var(--muted); font-size: 12px; margin-top: 12px; }
+    .bottom-actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 16px;
+      margin-bottom: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .btn.danger {
+      background: linear-gradient(135deg, #ff4d4f, #ff7875) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 8px 20px rgba(255, 77, 79, 0.3) !important;
+      padding: 10px 24px !important;
+      font-size: 14px !important;
+      border-radius: 12px !important;
+    }
+    .btn.danger:hover {
+      background: linear-gradient(135deg, #ff7875, #ffa39e) !important;
+      box-shadow: 0 10px 24px rgba(255, 77, 79, 0.4) !important;
+    }
     .export-box { margin-top: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-size: 12px; color: var(--muted); word-break: break-all; }
+
+    .custom-page .shell {
+      padding: 32px 32px 16px;
+    }
+    .controls-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 1px 0 20px;
+      align-items: center;
+    }
+    .controls-stack .row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      width: 100%;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .btn.small-back {
+      padding: 6px 12px !important;
+      font-size: 13px !important;
+      border-radius: 8px !important;
+      height: auto !important;
+    }
 
 
 		:root {
@@ -382,11 +476,12 @@
 			display: grid;
 			grid-template-columns: 1.1fr 0.9fr;
 			gap: 20px;
-			padding: 0 32px 28px;
+			padding-bottom: 8px;
 		}
 
 		
-		.shell > section {
+		.shell > section,
+		.shell > main {
 			margin: 0 32px 20px 32px;
 		}
 
@@ -415,7 +510,7 @@
 				font-size: 24px;
 			}
 			main {
-				padding: 0 10px 8px;
+				padding: 0;
 			}
 			.panel {
 				padding: 10px;
@@ -466,7 +561,8 @@
 				padding: 8px 10px 24px;
 				font-size: 11px;
 			}
-			.shell > section {
+			.shell > section,
+			.shell > main {
 				margin: 0 10px 12px;
 			}
 		}

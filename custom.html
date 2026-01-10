@@ -10,31 +10,47 @@
   <link rel="stylesheet" href="css/style.css" />
   
 </head>
-<body>
+<body class="custom-page">
   <div class="bg-blob blob-1"></div>
   <div class="bg-blob blob-2"></div>
   <div class="bg-blob blob-3"></div>
 
   <div class="shell">
-    <h1>自定义词库</h1>
+    <div class="header-row">
+      <h1>自定义词库</h1>
+      <button class="btn ghost small-back" id="back" type="button" onclick="location.href='index.html'">返回主页</button>
+    </div>
+    
     <p class="subtitle">填入要参与押韵的自定义词或单字，空格/，/换行分隔。会保存在浏览器本地并被主页自动加载。</p>
 
     <textarea id="input" placeholder="示例：北京 程序员 飞"></textarea>
     <div class="hint">添加规则：多字词会被拆成单字参与押韵；保存后数据存入 localStorage（不会上传）。</div>
 
-    <div class="controls">
-      <button class="btn" id="save" type="button" onclick="handleSave()">保存到浏览器</button>
-      <button class="btn ghost" id="clear" type="button" onclick="handleClear()">清空自定义</button>
-      <button class="btn ghost" id="back" type="button" onclick="location.href='index.html'">返回生成器</button>
-      <button class="btn ghost" id="export" type="button" onclick="handleExport()">导出到剪切板</button>
-      <button class="btn ghost" id="import" type="button" onclick="handleImport()">从剪切板导入</button>
+    <div class="controls-stack">
+      <div class="row main-row">
+        <button class="btn" id="save" type="button" onclick="handleSave()">保存到浏览器</button>
+      </div>
+      <div class="row sub-row">
+        <button class="btn ghost" id="export" type="button" onclick="handleExport()">导出到剪切板</button>
+        <button class="btn ghost" id="import" type="button" onclick="handleImport()">从剪切板导入</button>
+      </div>
     </div>
-
-    <div class="list" id="current"></div>
+    
+    <div class="divider"></div>
+    
+    <div class="list-container">
+      <h3>当前已添加的词库</h3>
+      <div class="list" id="current"></div>
+    </div>
+    
     <div class="export-box" id="exportBox" style="display:none;"></div>
     <div class="hint" id="status"></div>
 
-    <div class="footer">存储键：CUSTOM_RHYME_BANK。主页会读取并合并至字库。</div>
+   
+    
+    <div class="bottom-actions">
+      <button class="btn danger" id="clear" type="button" onclick="handleClear()">清空自定义</button>
+    </div>
   </div>
 
   <script>
@@ -100,17 +116,40 @@
     };
 
     const renderList = () => {
+      console.log('开始渲染列表...');
       const box = document.getElementById('current');
-      const list = loadList();
-      if (!list.length) {
-        box.textContent = '当前无自定义词';
+      if (!box) {
+        console.error('找不到渲染容器 #current');
         return;
       }
+      const list = loadList();
+      console.log('从存储加载到的词列表:', list);
+      
+      // 无论有没有词，都先清空之前的状态（包括“当前无自定义词”文字）
       box.innerHTML = '';
+      
+      if (!list || !list.length) {
+        const emptyHint = document.createElement('div');
+        emptyHint.className = 'empty-hint';
+        emptyHint.textContent = '当前无自定义词';
+        emptyHint.style.color = 'var(--muted)';
+        emptyHint.style.fontSize = '14px';
+        box.appendChild(emptyHint);
+        return;
+      }
       list.forEach((w) => {
         const span = document.createElement('span');
         span.className = 'pill';
         span.textContent = w;
+        // 添加点击删除功能，增强互动
+        span.title = '点击删除此词';
+        span.onclick = () => {
+          if (confirm(`确定删除 "${w}" 吗？`)) {
+            const newList = loadList().filter(item => item !== w);
+            saveList(newList);
+            renderList();
+          }
+        };
         box.appendChild(span);
       });
     };
@@ -185,11 +224,30 @@
       }
     };
 
+    // 使用 requestAnimationFrame 确保在下一帧渲染时执行，避开样式计算冲突
+    const safeInit = () => {
+        requestAnimationFrame(() => {
+            console.log('Safe Init 执行');
+            init();
+        });
+    };
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
+      document.addEventListener('DOMContentLoaded', safeInit);
     } else {
-      init();
+      safeInit();
     }
+    window.addEventListener('load', safeInit);
+    
+    // 每隔1秒检查并渲染一次，确保异步加载的数据能显示
+    setInterval(() => {
+        // 只有当列表确实发生变化时才重新渲染，避免影响滚动
+        const list = loadList();
+        const currentPills = document.querySelectorAll('.pill').length;
+        if (list.length !== currentPills) {
+            renderList();
+        }
+    }, 1000);
   </script>
   <script src="data.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
@@ -233,13 +291,18 @@
         opacity: 0,
         duration: 0.8
       }, "-=0.6")
-      .from(".btn", {
+      .from(".controls-stack .btn", {
         y: 20,
         opacity: 0,
         duration: 0.6,
         stagger: 0.1
       }, "-=0.6")
-      .from(".list", { // Fixed selector from #list to .list
+      .from(".bottom-actions", {
+        y: 20,
+        opacity: 0,
+        duration: 0.8
+      }, "-=0.4")
+      .from(".list-container", {
         opacity: 0,
         y: 20,
         duration: 0.8

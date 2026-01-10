@@ -496,16 +496,31 @@ const cdnList = [
 					if (Array.isArray(customBank)) {
 						for (const phrase of customBank) {
 							if (typeof phrase === 'string' && phrase.length > 0) {
-								// 检查自定义词是否以查询key结尾
+								// 检查自定义词是否符合查询条件
+								// 根据当前查询 infos 的长度，决定匹配长度
 								const phraseInfos = Array.from(phrase).map(ch => toInfo(ch)).filter(Boolean);
 								if (phraseInfos.length > 0) {
-									const lastTwoPhrase = phraseInfos.length >= 2 ? phraseInfos.slice(-2) : phraseInfos;
-													const phraseKeyParts = lastTwoPhrase.map(info => `${info.fin}${info.tone}`);
-													const phraseKey = phraseKeyParts.join('_');
-													const phraseVariants = buildKeyVariants(phraseKey);
-													const hit = phraseVariants.some(v => queryVariantSet.has(v));
+									// 匹配逻辑：如果自定义词比查询词长，取其末尾相同长度的部分进行匹配
+									// 如果自定义词比查询词短，则它必须完全符合查询词末尾的部分
+									const matchLen = Math.min(phraseInfos.length, infos.length);
+									const relevantPhraseInfos = phraseInfos.slice(-matchLen);
 									
-													if (hit) {
+									// 构造用于匹配的 key
+									const phraseKeyParts = relevantPhraseInfos.map(info => `${info.fin}${info.tone}`);
+									const phraseKey = phraseKeyParts.join('_');
+									
+									// 生成查询条件在该长度下的 key 集合
+									const targetInfos = infos.slice(-matchLen);
+									const targetQueryKeys = generateQueryKeys(targetInfos);
+									const targetVariantSet = new Set();
+									targetQueryKeys.forEach(k => {
+										buildKeyVariants(k).forEach(v => {
+											targetVariantSet.add(encodeKey(v));
+										});
+									});
+
+									const encodedPhraseKey = encodeKey(phraseKey);
+									if (targetVariantSet.has(encodedPhraseKey)) {
 										const phraseLen = Array.from(phrase).length;
 										if (!matchedByWordCount[phraseLen]) {
 											matchedByWordCount[phraseLen] = [];
@@ -866,9 +881,9 @@ const cdnList = [
 				// 优先逐字韵脚匹配（所有字都要满足源词的韵母/声调规则）；若无，再退回“末两字”匹配结果
 				const tier = getLoosenessTier(looseness);
 				const allowToneRelax = tier >= 2;
-				const strongMatches = dictResult.sameLength.filter((phrase) => 
-					// 排除与用户输入相同的词和包含用户输入的词
-					phrase !== userInput && !phrase.includes(userInput) && phraseFitsSource(phrase, tempInfosWithOverrides, looseness)
+				const strongMatches = dictResult.sameLength.filter((phrase) =>
+					// 修改：不再排除与用户输入相同的词，以便在结果中显示它
+					!phrase.includes(userInput) && phraseFitsSource(phrase, tempInfosWithOverrides, looseness)
 				);
 				const ranked = strongMatches.length > 0 ? strongMatches : [];
 				
@@ -1032,8 +1047,8 @@ const cdnList = [
 		let newInfos;
 		if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength) && dictResult.sameLength.length > 0) {
 			const tier = getLoosenessTier(looseness);
-			const strongMatches = dictResult.sameLength.filter((phrase) => 
-				phrase !== userInput && !phrase.includes(userInput) && phraseFitsSource(phrase, updatedInfos, looseness)
+			const strongMatches = dictResult.sameLength.filter((phrase) =>
+				!phrase.includes(userInput) && phraseFitsSource(phrase, updatedInfos, looseness)
 			);
 			const ranked = strongMatches.length > 0 ? strongMatches : [];
 			
@@ -1110,15 +1125,15 @@ const cdnList = [
 				let results = [];
 				
 				// 先显示当前生成结果（排除与用户输入相同的词）
-				if (text && text !== userInput) {
+				if (text) {
 					results.push(text);
 				}
 				
 				// 然后添加字典中的相同字数结果（必须通过phraseFitsSource过滤）
 				if (dictResult && dictResult.sameLength && dictResult.sameLength.length > 0) {
 					for (const phrase of dictResult.sameLength) {
-						// 排除用户输入和已经在结果中的词
-						if (phrase !== text && phrase !== userInput && !results.includes(phrase)) {
+						// 排除已经在结果中的词（不再排除 userInput，因为它可能已经在 dictResult 中）
+						if (phrase !== text && !results.includes(phrase)) {
 							// 严格检查该词是否真正符合源词的韵脚要求
 							if (skipFilter || phraseFitsSource(phrase, infos, looseness)) {
 								results.push(phrase);
