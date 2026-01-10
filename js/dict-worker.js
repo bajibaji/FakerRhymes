@@ -191,9 +191,24 @@ self.onmessage = async function(event) {
     try {
       const db = await openDB();
       const transaction = db.transaction([STORE_NAME], 'readwrite');
-      transaction.objectStore(STORE_NAME).clear();
-      transaction.oncomplete = () => self.postMessage({ type: 'clearSuccess' });
+      const clearRequest = transaction.objectStore(STORE_NAME).clear();
+      
+      transaction.oncomplete = () => {
+        console.log('IndexedDB 数据清理完成');
+        self.postMessage({ type: 'clearSuccess' });
+      };
+      
+      transaction.onerror = () => {
+        console.error('IndexedDB 事务错误:', transaction.error);
+        self.postMessage({ type: 'error', message: 'IndexedDB 清理失败: ' + transaction.error });
+      };
+      
+      clearRequest.onerror = () => {
+        console.error('清理请求错误:', clearRequest.error);
+        self.postMessage({ type: 'error', message: 'IndexedDB 清理请求失败' });
+      };
     } catch (err) {
+      console.error('clearCache 异常:', err);
       self.postMessage({ type: 'error', message: err.message });
     }
   }

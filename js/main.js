@@ -1567,26 +1567,67 @@ const cdnList = [
 				clearDictBtn.disabled = true;
 
 				const worker = new Worker('./js/dict-worker.js');
+				
+				// 设置超时保护（10秒）
+				const timeoutId = setTimeout(() => {
+					console.warn('清理缓存超时，强制关闭');
+					worker.terminate();
+					handleClearCacheComplete();
+				}, 10000);
+
+				// 错误处理
+				worker.onerror = (error) => {
+					console.error('Worker 错误:', error);
+					clearTimeout(timeoutId);
+					worker.terminate();
+					handleClearCacheComplete();
+				};
+
+				const handleClearCacheComplete = () => {
+					// 清理 IndexedDB
+					try {
+						const deleteRequest = indexedDB.deleteDatabase('FakerRhymesDB');
+						deleteRequest.onsuccess = () => {
+							console.log('IndexedDB 清理成功');
+						};
+						deleteRequest.onerror = (err) => {
+							console.warn('IndexedDB 清理失败:', err);
+						};
+					} catch (e) {
+						console.warn('直接清理 IndexedDB 出错:', e);
+					}
+
+					localStorage.removeItem('ONLINE_DICT_TIME');
+					localStorage.removeItem('ONLINE_DICT_COUNT');
+					localStorage.removeItem('ONLINE_DICT_CACHE');
+					localStorage.removeItem('ONLINE_DICT_STATS');
+					localStorage.removeItem('ONLINE_DICT_SOURCE');
+					
+					bloomFilter = new BloomFilter();
+					window.dictLoaded = false;
+					
+					clearDictBtn.innerHTML = '<i class="ri-check-line"></i> 已清理';
+					updateDictStatus();
+					
+					setTimeout(() => {
+						clearDictBtn.innerHTML = originalText;
+						clearDictBtn.disabled = false;
+					}, 1500);
+				};
+
 				worker.onmessage = (event) => {
 					if (event.data.type === 'clearSuccess') {
-						localStorage.removeItem('ONLINE_DICT_TIME');
-						localStorage.removeItem('ONLINE_DICT_COUNT');
-						localStorage.removeItem('ONLINE_DICT_CACHE');
-						localStorage.removeItem('ONLINE_DICT_STATS');
-						
-						bloomFilter = new BloomFilter();
-						window.dictLoaded = false;
-						
-						clearDictBtn.innerHTML = '<i class="ri-check-line"></i> 已清理';
-						updateDictStatus();
-						
-						setTimeout(() => {
-							clearDictBtn.innerHTML = originalText;
-							clearDictBtn.disabled = false;
-						}, 2000);
+						clearTimeout(timeoutId);
 						worker.terminate();
+						handleClearCacheComplete();
+					} else if (event.data.type === 'error') {
+						console.error('清理错误:', event.data.message);
+						clearTimeout(timeoutId);
+						worker.terminate();
+						handleClearCacheComplete();
 					}
 				};
+				
 				worker.postMessage({ action: 'clearCache' });
 			});
 
