@@ -1,6 +1,6 @@
 const CACHE_NAME = 'fakerhymes-cache-v1';
 const ASSETS = [
-  './data.js',
+  './css',
   './manifest.json',
   './dict_optimized.json'
 ];
