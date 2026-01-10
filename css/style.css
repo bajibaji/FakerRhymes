@@ -1510,4 +1510,32 @@
 				line-height: 1.75;
 			}
 		}
-	
+
+    /* =========================================
+       新增：开场模糊（伪马赛克）变清晰特效
+       不影响布局，利用 pointer-events: none 实现
+       ========================================= */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      backdrop-filter: blur(60px) contrast(1.2);
+      -webkit-backdrop-filter: blur(60px) contrast(1.2);
+      animation: introReveal 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes introReveal {
+      0% {
+        backdrop-filter: blur(60px) contrast(1.2);
+        -webkit-backdrop-filter: blur(60px) contrast(1.2);
+        background-color: rgba(243, 241, 245, 0.1);
+      }
+      100% {
+        backdrop-filter: blur(0) contrast(1);
+        -webkit-backdrop-filter: blur(0) contrast(1);
+        background-color: transparent;
+      }
+    }
+
