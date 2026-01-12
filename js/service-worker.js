@@ -1,7 +1,9 @@
 const CACHE_NAME = 'fakerhymes-cache-v1';
 const ASSETS = [
   './manifest.json',
-  './dict_optimized.json'
+  './dict_part_1.json',
+  './dict_part_2.json',
+  './dict_part_3.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -28,8 +30,10 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // 大文件（词库）单独处理：缓存优先 + 后台静默更新
-  // 目的：避免每次刷新/进入都重新下载 ~40MB，显著降低服务器流量。
-  if (url.pathname.endsWith('/dict_optimized.json')) {
+  // 目的：避免每次刷新/进入都重新下载词典文件，显著降低服务器流量。
+  if (url.pathname.endsWith('/dict_part_1.json') || 
+      url.pathname.endsWith('/dict_part_2.json') || 
+      url.pathname.endsWith('/dict_part_3.json')) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request);

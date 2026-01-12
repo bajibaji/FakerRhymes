@@ -156,21 +156,37 @@ const cdnList = [
 		// 全局词库对象，用于快速内存查询
 		let globalDictData = null;
 
-		// 加载优化字典
+		// 加载优化字典（拆分为3个文件）
 		const loadDict = async () => {
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
 
 			try {
 				// 极致优化：不再写入 IndexedDB（写入太慢），直接将整个 JSON 载入内存
-				// 手机端现代浏览器处理 40MB 的对象其实很快，瓶颈在于 IndexedDB 序列化
-				devLog('开始极速载入词库...');
+				// 拆分成3个文件以提升加载性能
+				devLog('开始极速载入词库（3个文件）...');
 				const startTime = performance.now();
 				
-				const response = await fetch('./dict_optimized.json');
-				if (!response.ok) throw new Error('HTTP ' + response.status);
+				// 并行加载3个拆分文件
+				const [response1, response2, response3] = await Promise.all([
+					fetch('./dict_part_1.json'),
+					fetch('./dict_part_2.json'),
+					fetch('./dict_part_3.json')
+				]);
 				
-				const data = await response.json();
+				if (!response1.ok || !response2.ok || !response3.ok) {
+					throw new Error('加载词典文件失败');
+				}
+				
+				// 并行解析JSON
+				const [data1, data2, data3] = await Promise.all([
+					response1.json(),
+					response2.json(),
+					response3.json()
+				]);
+				
+				// 合并3个数据对象
+				const data = {...data1, ...data2, ...data3};
 				
 				// 预处理 Key
 				globalDictData = new Map();
@@ -1376,7 +1392,13 @@ const cdnList = [
 
 				worker.postMessage({
 					action: 'loadAndProcess',
-					payload: { dictSources: [{ name: '优化词库', url: './dict_optimized.json' }] }
+					payload: { 
+						dictSources: [
+							{ name: '优化词库-1', url: './dict_part_1.json' },
+							{ name: '优化词库-2', url: './dict_part_2.json' },
+							{ name: '优化词库-3', url: './dict_part_3.json' }
+						] 
+					}
 				});
 
 			} catch (err) {
@@ -1397,15 +1419,28 @@ const cdnList = [
 			const originalText = btn.textContent;
 
 			try {
-				const response = await fetch('./dict_optimized.json', {
-					method: 'GET',
-					headers: { 'Accept': 'application/json' }
-				});
-
-				if (!response.ok) throw new Error('HTTP ' + response.status);
+				// 并行加载3个拆分文件
+				const [response1, response2, response3] = await Promise.all([
+					fetch('./dict_part_1.json', { method: 'GET', headers: { 'Accept': 'application/json' } }),
+					fetch('./dict_part_2.json', { method: 'GET', headers: { 'Accept': 'application/json' } }),
+					fetch('./dict_part_3.json', { method: 'GET', headers: { 'Accept': 'application/json' } })
+				]);
+				
+				if (!response1.ok || !response2.ok || !response3.ok) {
+					throw new Error('加载词典文件失败');
+				}
+				
+				// 并行解析JSON
+				const [data1, data2, data3] = await Promise.all([
+					response1.json(),
+					response2.json(),
+					response3.json()
+				]);
+				
+				// 合并3个数据对象
+				const data = {...data1, ...data2, ...data3};
 
 				btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
-				const data = await response.json();
 				const chars = new Set();
 				let stats = {
 					totalStrings: 0,
