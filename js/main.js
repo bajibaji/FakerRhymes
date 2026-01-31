@@ -220,6 +220,7 @@ const cdnList = [
 				const btn = document.getElementById('loadDictBtn');
 				if (btn) btn.innerHTML = `✅ 已就绪 (${globalDictData.size} 组)`;
 				
+				
 				const warning = document.getElementById('dictWarning');
 				if (warning) warning.style.display = 'none';
 
@@ -416,7 +417,10 @@ const cdnList = [
 			// 生成所有可能的查询键变体
 			const generateQueryKeys = (infos) => {
 				const keys = [];
+				const MAX_COMBINATIONS = 500; // 限制最大组合数防止由于 Tier 2 导致的浏览器假死
+				
 				const recurse = (index, current) => {
+					if (keys.length >= MAX_COMBINATIONS) return;
 					if (index === infos.length) {
 						keys.push(current.join('_'));
 						return;
@@ -442,7 +446,9 @@ const cdnList = [
 						for (const tone of toneVariants) {
 							const keyPart = `${fin}${tone}`;
 							recurse(index + 1, [...current, keyPart]);
+							if (keys.length >= MAX_COMBINATIONS) break;
 						}
+						if (keys.length >= MAX_COMBINATIONS) break;
 					}
 				};
 				recurse(0, []);
@@ -450,6 +456,7 @@ const cdnList = [
 			};
 			
 			const queryKeys = generateQueryKeys(validInfos);
+			devLog(`[Tier ${tier}] 生成原始查询键数量: ${queryKeys.length}`);
 			const queryVariantSet = new Set();
 			queryKeys.forEach(k => {
 				buildKeyVariants(k).forEach(v => {
@@ -458,12 +465,14 @@ const cdnList = [
 					queryVariantSet.add(encoded);
 				});
 			});
+			devLog(`[Tier ${tier}] 编码后的查询变体数量: ${queryVariantSet.size}`);
 			
 			// 在字典中搜索所有可能的匹配
 			const matchedByWordCount = {};
 			const sourceLength = infos.length;
 			
 			// 优化方案：移动端优先，只使用精准哈希查询
+			let suffixMatchCount = 0;
 			for (const qk of queryVariantSet) {
 			// 1. 精确匹配（相同长度）
 			const candidates = await getFromDB(qk);
@@ -480,11 +489,17 @@ const cdnList = [
 				}
 
 				// 2. 后缀匹配（更长的词）
-				// 使用末尾一个字（长度2）进行初步索引筛选，提高效率
+				// 性能优化：只有在查询键长度 > 1 (即 2 字词或以上) 时才进行后缀匹配，且 Tier 2 模式下限制匹配数量
+				// 同时，如果当前 queryVariantSet 已经很大，则进一步限制后缀搜索深度
 				if (qk.length >= 2) {
 					const suffix = qk.slice(-2);
 					const longerKeys = suffixIndex.get(suffix) || [];
-					for (const lk of longerKeys) {
+					
+					// 针对 Tier 2 优化：如果候选键太多，只处理前 500 个，平衡性能与结果丰富度
+					const limitedKeys = (tier >= 2 && longerKeys.length > 500) ? longerKeys.slice(0, 500) : longerKeys;
+					
+					suffixMatchCount += limitedKeys.length;
+					for (const lk of limitedKeys) {
 						// 严格匹配整个 qk 作为后缀，且长度更长
 						if (lk.endsWith(qk) && lk.length > qk.length) {
 							const moreCandidates = await getFromDB(lk);
@@ -503,6 +518,7 @@ const cdnList = [
 					}
 				}
 			}
+			devLog(`[Tier ${tier}] 后缀索引检查总次数: ${suffixMatchCount}`);
 
 			// 如果内存中查不到，且此时词库还没加载，自动触发一次极速加载
 			if (Object.keys(matchedByWordCount).length === 0 && !window.dictLoaded) {
@@ -580,14 +596,48 @@ const cdnList = [
 		
 		// 如果没有相同字数的匹配，且源字数大于2，尝试降级查询
 		if (sameLengthResults.length === 0 && sourceLength > 2) {
+			console.log(`[Debug] No exact match for ${sourceLength} chars, trying degraded query...`);
 			let currentLength = sourceLength - 1;
-			while (currentLength >= 2 && sameLengthResults.length === 0) {
+			// 避免死循环，增加最大降级次数限制
+			while (currentLength >= 2) {
 				// 取末尾 currentLength 个字重新查询
+				console.log(`[Debug] Degrading to ${currentLength} chars...`);
 				const shorterInfos = infos.slice(-currentLength);
 				const shorterResult = await queryDict(shorterInfos, looseness);
 				
 				if (shorterResult && shorterResult.sameLength && shorterResult.sameLength.length > 0) {
+					console.log(`[Debug] Degraded query found results!`);
 					sameLengthResults.push(...shorterResult.sameLength);
+
+					// 修复：保留降级查询中发现的长词
+					// shorterResult.moreLengths 里的词，长度肯定 > currentLength
+					if (shorterResult.moreLengths && shorterResult.moreLengths.length > 0) {
+						console.log(`[Debug] Recovering ${shorterResult.moreLengths.length} longer words from degraded query...`);
+						for (const phrase of shorterResult.moreLengths) {
+							const pLen = Array.from(phrase).length;
+							
+							// 如果这个长词的长度等于原始查询长度，把它算作“同长匹配”
+							if (pLen === sourceLength) {
+								if (!sameLengthResults.includes(phrase)) {
+									sameLengthResults.push(phrase);
+								}
+							}
+							// 如果真的比原始查询还长，放入“更多匹配”
+							else if (pLen > sourceLength) {
+								if (!moreLengthResults.includes(phrase)) {
+									moreLengthResults.push(phrase);
+								}
+							}
+							// 如果介于 currentLength 和 sourceLength 之间（理论上不太可能，因为 currentLength = sourceLength - 1）
+							// 或者就是 currentLength，那它应该在 shorterResult.sameLength 里
+						}
+					}
+					
+					// 还要把 shorterResult.sameLength 里长度大于 sourceLength 的也加进去（虽然理论上不会有）
+					// 但如果是从 4->3 降级，3字结果对于4字查询来说是“短”的，
+					// 但对于3字查询来说是“同长”的。
+					// 这里我们主要关心的是补全 moreLengthResults
+					
 					devLog(`降级查询成功：从 ${sourceLength} 字降到 ${currentLength} 字`);
 					break;
 				}
@@ -608,6 +658,11 @@ const cdnList = [
 			moreLengths: moreLengthResults.length > 0 ? moreLengthResults : []
 		};
 	};
+
+	// 显式暴露核心函数供性能测试脚本使用
+	window.loadDict = loadDict;
+	window.toInfo = toInfo;
+	window.queryDict = queryDict;
 
 		const buildFinalVariants = (fin, tier) => {
 			// Tier 0: 严格模式，完全匹配
@@ -638,58 +693,55 @@ const cdnList = [
 			return fin;
 		};
 
-		// 检查候选短语是否逐字匹配源词的韵脚（优先保证每个字的韵脚一致）
-		const phraseFitsSource = (phrase, sourceInfos, looseness) => {
-			const tier = getLoosenessTier(looseness);
-			const allowToneRelax = tier >= 2; // Tier 2 忽略声调
+		// 检查候选短语是否逐字匹配源词的韵脚，并返回匹配等级 (0: strict, 1: medium, 2: loose, -1: mismatch)
+		const getPhraseMatchTier = (phrase, sourceInfos, looseness) => {
+			const tierLimit = getLoosenessTier(looseness);
 			const chars = Array.from(phrase);
 			
-			// 修改：始终从末尾对齐进行比较
-			// 无论是长词还是短词，都比较末尾对应的字
 			const len = Math.min(chars.length, sourceInfos.length);
 			const srcOffset = sourceInfos.length - len;
 			const phraseOffset = chars.length - len;
 
-			// 定义特殊声母集合（平翘舌）
 			const specialInitials = ['zh', 'ch', 'sh', 'r', 'z', 'c', 's'];
+			let maxTierFound = 0;
 
 			for (let i = 0; i < len; i++) {
 				const src = sourceInfos[srcOffset + i];
 				const ch = chars[phraseOffset + i];
 				const pInfo = ch ? toInfo(ch) : null;
-				if (!src || !pInfo || !src.fin || src.fin === '-') return false;
+				if (!src || !pInfo || !src.fin || src.fin === '-') return -1;
 				
-				// 检查韵母兼容性
-				let rhymeOk = false;
-				if (tier === 0) {
-					// 严格：必须完全相同
-					rhymeOk = (src.fin === pInfo.fin);
-				} else {
-					// 宽松：检查是否在同一个变体组中
-					const variants = buildFinalVariants(src.fin, tier);
-					rhymeOk = variants.includes(pInfo.fin);
+				let currentMatchTier = -1;
+				
+				// 1. 尝试严格匹配
+				if (src.fin === pInfo.fin && src.tone === pInfo.tone) {
+					currentMatchTier = 0;
+				} 
+				// 2. 尝试中等匹配 (同调，但韵母放宽)
+				else if (src.tone === pInfo.tone && buildFinalVariants(src.fin, 1).includes(pInfo.fin)) {
+					currentMatchTier = 1;
 				}
-				
-				if (!rhymeOk) return false;
-				
-				// 检查声调
-				// Tier 0 & 1: 声调必须相同
-				// Tier 2: 声调可不同
-				const toneOk = allowToneRelax || (src.tone === pInfo.tone);
-				if (!toneOk) return false;
+				// 3. 尝试最松匹配 (韵母放宽，忽略声调)
+				else if (buildFinalVariants(src.fin, 2).includes(pInfo.fin)) {
+					currentMatchTier = 2;
+				}
 
-				// --- 新增：声母类型过滤 ---
-				// 规则：如果源字声母不是平翘舌音，则匹配字声母也不能是平翘舌音。
-				// 避免“自律(l)”匹配到“世世(sh)”这种听感差异巨大的情况。
+				// 如果该字的匹配等级超过了用户设置的限制，或者根本不匹配
+				if (currentMatchTier === -1 || currentMatchTier > tierLimit) return -1;
+				
+				maxTierFound = Math.max(maxTierFound, currentMatchTier);
+
+				// 声母类型过滤 (非平翘舌音不匹配平翘舌音)
 				const srcIsSpecial = specialInitials.includes(src.ini);
 				const matchIsSpecial = specialInitials.includes(pInfo.ini);
-				
-				if (!srcIsSpecial && matchIsSpecial) {
-					return false;
-				}
-				// -------------------------
+				if (!srcIsSpecial && matchIsSpecial) return -1;
 			}
-			return true;
+			return maxTierFound;
+		};
+
+		// 保持兼容性的旧函数，现在内部调用 getPhraseMatchTier
+		const phraseFitsSource = (phrase, sourceInfos, looseness) => {
+			return getPhraseMatchTier(phrase, sourceInfos, looseness) !== -1;
 		};
 
 		const pickFromMap = (fin, originalTone, looseness, forceTone = null) => {
@@ -860,6 +912,13 @@ const cdnList = [
 			return;
 		}
 
+		// 新增：限制单字查询，防止性能问题和无意义结果
+		if (Array.from(src).length < 2) {
+			goBtn.classList.remove('loading');
+			render([], '⚠️ 请输入至少两个字以获得更精准的押韵结果。', null, '');
+			return;
+		}
+
 		// Build new infos but preserve locked/forced settings from previous run
 			const oldInfos = Array.isArray(currentInfos) ? currentInfos.slice() : [];
 			
@@ -899,14 +958,14 @@ const cdnList = [
 			let newInfos;
 			// 检查 dictResult 是否是多个候选项（字符串数组）
 			if (dictResult && dictResult.sameLength && Array.isArray(dictResult.sameLength) && dictResult.sameLength.length > 0) {
-				// 优先逐字韵脚匹配（所有字都要满足源词的韵母/声调规则）；若无，再退回“末两字”匹配结果
-				const tier = getLoosenessTier(looseness);
-				const allowToneRelax = tier >= 2;
-				const strongMatches = dictResult.sameLength.filter((phrase) =>
-					// 修改：不再排除与用户输入相同的词，以便在结果中显示它
-					!phrase.includes(userInput) && phraseFitsSource(phrase, tempInfosWithOverrides, looseness)
-				);
-				const ranked = strongMatches.length > 0 ? strongMatches : [];
+				// 标记每个词的匹配等级并排序
+				const matchesWithTier = dictResult.sameLength
+					.map(phrase => ({ phrase, tier: getPhraseMatchTier(phrase, tempInfosWithOverrides, looseness) }))
+					.filter(item => item.tier !== -1 && !item.phrase.includes(userInput));
+				
+				// 按等级排序 (0 < 1 < 2)
+				matchesWithTier.sort((a, b) => a.tier - b.tier);
+				const ranked = matchesWithTier.map(item => item.phrase);
 				
 				if (ranked.length === 0) {
 					// 字典查询没有通过过滤的结果，退回到逐字选择的模式
@@ -1142,41 +1201,72 @@ const cdnList = [
 			const badges = document.getElementById('badges');
 			
 			if (output) {
-				// 显示相同字数的所有匹配结果（来自dictResult）
-				let results = [];
+				// 获取所有待显示的匹配结果及其等级
+				let resultsWithTier = [];
 				
-				// 先显示当前生成结果（排除与用户输入相同的词）
+				// 1. 处理主结果 (text)
 				if (text) {
-					results.push(text);
+					resultsWithTier.push({ phrase: text, tier: getPhraseMatchTier(text, infos, looseness) });
 				}
 				
-				// 然后添加字典中的相同字数结果（必须通过phraseFitsSource过滤）
+				// 2. 处理字典中的其他相同字数结果
 				if (dictResult && dictResult.sameLength && dictResult.sameLength.length > 0) {
 					for (const phrase of dictResult.sameLength) {
-						// 排除已经在结果中的词（不再排除 userInput，因为它可能已经在 dictResult 中）
-						if (phrase !== text && !results.includes(phrase)) {
-							// 严格检查该词是否真正符合源词的韵脚要求
-							if (skipFilter || phraseFitsSource(phrase, infos, looseness)) {
-								results.push(phrase);
+						if (phrase !== text) {
+							const tier = skipFilter ? 0 : getPhraseMatchTier(phrase, infos, looseness);
+							if (tier !== -1) {
+								if (!resultsWithTier.some(r => r.phrase === phrase)) {
+									resultsWithTier.push({ phrase, tier });
+								}
 							}
 						}
 					}
 				}
 				
-				// 应用平仄过滤（仅在最松时有效）
+				// 3. 排序 (按等级 0 -> 1 -> 2)
+				resultsWithTier.sort((a, b) => a.tier - b.tier);
+
+				// 4. 应用平仄过滤
 				if (looseness >= 1.0 && pingzeFilter !== 'all') {
-					results = filterByPingZe(results, pingzeFilter);
+					resultsWithTier = resultsWithTier.filter(item => {
+						const filtered = filterByPingZe([item.phrase], pingzeFilter);
+						return filtered.length > 0;
+					});
 				}
 				
-				// 用制表符分隔显示所有结果在同一行
-				const resultText = results.join('\t');
+				// 5. 渲染 HTML (支持颜色标注)
+				output.innerHTML = '';
+				resultsWithTier.forEach((item, idx) => {
+					const span = document.createElement('span');
+					span.textContent = item.phrase;
+					
+					// 设置不同等级的颜色 (更亮、更高对比度的配色方案)
+					if (item.tier === 0) {
+						span.style.color = '#d7c4ff'; // 严格：亮紫色
+						span.title = '严格匹配 (同韵同调)';
+					} else if (item.tier === 1) {
+						span.style.color = '#baa8df'; // 中等：亮青色
+						span.title = '中等匹配 (同调，韵母放宽)';
+					} else {
+						span.style.color = '#9e8cbe'; // 最松：亮灰色
+						span.title = '最松匹配 (忽略声调)';
+						span.style.opacity = '0.9';
+					}
+
+					output.appendChild(span);
+					
+					// 添加制表符分隔
+					if (idx < resultsWithTier.length - 1) {
+						output.appendChild(document.createTextNode('\t'));
+					}
+				});
+
 				output.style.whiteSpace = 'pre-wrap';
 				output.style.wordBreak = 'keep-all';
 				output.style.overflowWrap = 'normal';
-				output.textContent = resultText || '-';
 				output.style.fontFamily = 'var(--font-sans, "Inter", "Segoe UI", system-ui, -apple-system, sans-serif)';
 				output.style.fontSize = '18px';
-				output.style.fontWeight = '500';
+				output.style.fontWeight = '600';
 				output.style.lineHeight = '1.8';
 				output.style.letterSpacing = '0.5px';
 			}
