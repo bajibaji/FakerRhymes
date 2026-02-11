@@ -1,57 +1,57 @@
-// ÎÄ¼ş: js/performance-test.js
-// ÃèÊö: ¸ù¾İ PERFORMANCE_TEST.md ÎÄµµÒªÇó£¬×Ô¶¯»¯²âÊÔ´Êµä¼ìË÷ÑÓ³ÙµÄ½Å±¾¡£
-// Ê¹ÓÃ·½·¨: ÔÚä¯ÀÀÆ÷¿ØÖÆÌ¨ÖĞÔËĞĞ window.fakerRhymesPerformanceTests.runCoreTest() 
-//         »ò window.fakerRhymesPerformanceTests.runSearchLatencyTest('ÄãµÄ²éÑ¯´Ê', ´ÎÊı)
+// æ–‡ä»¶: js/performance-test.js
+// æè¿°: æ ¹æ® PERFORMANCE_TEST.md æ–‡æ¡£è¦æ±‚ï¼Œè‡ªåŠ¨åŒ–æµ‹è¯•è¯å…¸æ£€ç´¢å»¶è¿Ÿçš„è„šæœ¬ã€‚
+// ä½¿ç”¨æ–¹æ³•: åœ¨æµè§ˆå™¨æ§åˆ¶å°ä¸­è¿è¡Œ window.fakerRhymesPerformanceTests.runCoreTest() 
+//         æˆ– window.fakerRhymesPerformanceTests.runSearchLatencyTest('ä½ çš„æŸ¥è¯¢è¯', æ¬¡æ•°)
 
 (function () {
-    // È·±£È«¾Ö¶ÔÏóÌáÇ°¶¨Òå£¬·ÀÖ¹ÔÚ¿ØÖÆÌ¨ÔËĞĞ²âÊÔÊ±³öÏÖ Uncaught TypeError
+    // ç¡®ä¿å…¨å±€å¯¹è±¡æå‰å®šä¹‰ï¼Œé˜²æ­¢åœ¨æ§åˆ¶å°è¿è¡Œæµ‹è¯•æ—¶å‡ºç° Uncaught TypeError
     window.fakerRhymesPerformanceTests = {};
 
-    // ¼ì²éºËĞÄÒÀÀµº¯ÊıÊÇ·ñ¿ÉÓÃ
+    // æ£€æŸ¥æ ¸å¿ƒä¾èµ–å‡½æ•°æ˜¯å¦å¯ç”¨
     function checkDependencies() {
         if (!window.toInfo || !window.queryDict || !window.loadDict) {
-            console.error('? ĞÔÄÜ²âÊÔÒÀÀµº¯Êı (toInfo, queryDict, loadDict) Î´¼ÓÔØ¡£ÇëÈ·±£ js/main.js ¼°ÆäÒÀÀµ (Èç pinyin-pro) ÒÑ³É¹¦ÔØÈë¡£');
+            console.error('? æ€§èƒ½æµ‹è¯•ä¾èµ–å‡½æ•° (toInfo, queryDict, loadDict) æœªåŠ è½½ã€‚è¯·ç¡®ä¿ js/main.js åŠå…¶ä¾èµ– (å¦‚ pinyin-pro) å·²æˆåŠŸè½½å…¥ã€‚');
             return false;
         }
         return true;
     }
 
-    // ¸¨Öúº¯Êı: ½«´ÊÓï×ª»»³ÉÆ´ÒôĞÅÏ¢Êı×é (Infos)
+    // è¾…åŠ©å‡½æ•°: å°†è¯è¯­è½¬æ¢æˆæ‹¼éŸ³ä¿¡æ¯æ•°ç»„ (Infos)
     function getInfos(phrase) {
         if (!window.toInfo) return [];
         return Array.from(phrase).map(window.toInfo).filter(Boolean);
     }
 
     /**
-     * ÔËĞĞ¼ìË÷ÑÓ³Ù²âÊÔ
-     * @param {string} phrase - ÓÃÓÚ²éÑ¯µÄÖĞÎÄ´ÊÓï (½¨Òé 3-4 ×Ö)
-     * @param {number} testRuns - ÖØ¸´ÔËĞĞ´ÎÊı
+     * è¿è¡Œæ£€ç´¢å»¶è¿Ÿæµ‹è¯•
+     * @param {string} phrase - ç”¨äºæŸ¥è¯¢çš„ä¸­æ–‡è¯è¯­ (å»ºè®® 3-4 å­—)
+     * @param {number} testRuns - é‡å¤è¿è¡Œæ¬¡æ•°
      */
     async function runSearchLatencyTest(phrase, testRuns = 10) {
         if (!checkDependencies()) return;
 
         const infos = getInfos(phrase);
         if (infos.length === 0) {
-            console.error(`? ÎŞ·¨»ñÈ¡´ÊÓï "${phrase}" µÄÆ´ÒôĞÅÏ¢£¬²âÊÔÖÕÖ¹¡£`);
+            console.error(`? æ— æ³•è·å–è¯è¯­ "${phrase}" çš„æ‹¼éŸ³ä¿¡æ¯ï¼Œæµ‹è¯•ç»ˆæ­¢ã€‚`);
             return;
         }
 
         const results = [];
-        // ¶¨Òå²âÊÔÄ£Ê½ºÍ¶ÔÓ¦µÄ looseness Öµ (ËÉ½ô·Ö¼¶: 0, 1, 2)
+        // å®šä¹‰æµ‹è¯•æ¨¡å¼å’Œå¯¹åº”çš„ looseness å€¼ (æ¾ç´§åˆ†çº§: 0, 1, 2)
         const testModes = [
-            { name: 'ÑÏ¸ñÄ£Ê½ (Tier 0)', looseness: 0.0, target: '< 50ms' },
-            { name: 'ÖĞµÈÄ£Ê½ (Tier 1)', looseness: 0.35, target: '< 200ms' },
-            { name: '×îËÉÄ£Ê½ (Tier 2)', looseness: 0.7, target: '< 200ms' }
+            { name: 'ä¸¥æ ¼æ¨¡å¼ (Tier 0)', looseness: 0.0, target: '< 50ms' },
+            { name: 'ä¸­ç­‰æ¨¡å¼ (Tier 1)', looseness: 0.35, target: '< 200ms' },
+            { name: 'æœ€æ¾æ¨¡å¼ (Tier 2)', looseness: 0.7, target: '< 200ms' }
         ];
 
-        console.groupCollapsed(`? FakerRhymes ¼ìË÷ÑÓ³ÙĞÔÄÜ²âÊÔ: "${phrase}" (${testRuns}´ÎÖØ¸´)`);
-        console.log(`²éÑ¯´Ê: ${phrase} (${infos.length}×Ö), Æ´ÒôĞÅÏ¢ÓĞĞ§ĞÔ: ${infos.length === Array.from(phrase).length ? '?' : '??'} (¶àÒô×Ö¿ÉÄÜµ¼ÖÂĞÅÏ¢¶ªÊ§)`);
+        console.groupCollapsed(`? FakerRhymes æ£€ç´¢å»¶è¿Ÿæ€§èƒ½æµ‹è¯•: "${phrase}" (${testRuns}æ¬¡é‡å¤)`);
+        console.log(`æŸ¥è¯¢è¯: ${phrase} (${infos.length}å­—), æ‹¼éŸ³ä¿¡æ¯æœ‰æ•ˆæ€§: ${infos.length === Array.from(phrase).length ? '?' : '??'} (å¤šéŸ³å­—å¯èƒ½å¯¼è‡´ä¿¡æ¯ä¸¢å¤±)`);
 
         for (const mode of testModes) {
             const times = [];
             let totalResults = 0;
             
-            // Ô¤ÈÈ (Warm-up): È·±£Êı¾İÒÑ»º´æ/JITÓÅ»¯
+            // é¢„çƒ­ (Warm-up): ç¡®ä¿æ•°æ®å·²ç¼“å­˜/JITä¼˜åŒ–
             await window.queryDict(infos, mode.looseness);
 
             for (let i = 0; i < testRuns; i++) {
@@ -71,49 +71,49 @@
             const avg = times.reduce((a, b) => a + b, 0) / testRuns;
             
             results.push({
-                Ä£Ê½: mode.name,
-                Ä¿±ê: mode.target,
-                Æ½¾ùºÄÊ±_ms: avg.toFixed(3),
-                ×î¿ì_ms: min.toFixed(3),
-                ×îÂı_ms: max.toFixed(3),
-                ½á¹û×ÜÊı: totalResults
+                æ¨¡å¼: mode.name,
+                ç›®æ ‡: mode.target,
+                å¹³å‡è€—æ—¶_ms: avg.toFixed(3),
+                æœ€å¿«_ms: min.toFixed(3),
+                æœ€æ…¢_ms: max.toFixed(3),
+                ç»“æœæ€»æ•°: totalResults
             });
             
             console.log(`\n--- ${mode.name} (Looseness: ${mode.looseness}) ---`);
-            console.log(`  Æ½¾ùºÄÊ±: ${avg.toFixed(3)} ms`);
-            console.log(`  ½á¹û×ÜÊı: ${totalResults} ¸ö`);
+            console.log(`  å¹³å‡è€—æ—¶: ${avg.toFixed(3)} ms`);
+            console.log(`  ç»“æœæ€»æ•°: ${totalResults} ä¸ª`);
         }
         
         console.groupEnd();
         
-        // Ê¹ÓÃ console.table ¸ø³öÃ÷È·µÄÊı¾İÊÕ¼¯·ÖÎö
+        // ä½¿ç”¨ console.table ç»™å‡ºæ˜ç¡®çš„æ•°æ®æ”¶é›†åˆ†æ
         console.table(results);
     }
     
     /**
-     * ²âÁ¿´Ê¿â³õÊ¼»¯ºÄÊ±
+     * æµ‹é‡è¯åº“åˆå§‹åŒ–è€—æ—¶
      */
     async function measureDictLoadTime() {
         if (!checkDependencies()) return;
 
-        console.log('\n--- ´Ê¿â³õÊ¼»¯ºÄÊ±²âÊÔ (Dictionary Init) ---');
+        console.log('\n--- è¯åº“åˆå§‹åŒ–è€—æ—¶æµ‹è¯• (Dictionary Init) ---');
         if (window.dictLoaded) {
-            console.warn('?? ´ÊµäÒÑÔØÈëÄÚ´æ¡£¸Ã²âÊÔĞèÒªÔÚÇå¿Õä¯ÀÀÆ÷»º´æ (»òÇ¿ÖÆÖØÖÃ globalDictData) ºó²ÅÄÜ²â³öÀäÆô¶¯ĞÔÄÜ¡£');
-            console.log('ÇëÔËĞĞ loadDict() ²¢²é¿´¿ØÖÆÌ¨ÈÕÖ¾ÖĞ "´Ê¿âÈ«Á¿ÔØÈëÄÚ´æºÄÊ±" µÄÊä³ö¡£');
+            console.warn('?? è¯å…¸å·²è½½å…¥å†…å­˜ã€‚è¯¥æµ‹è¯•éœ€è¦åœ¨æ¸…ç©ºæµè§ˆå™¨ç¼“å­˜ (æˆ–å¼ºåˆ¶é‡ç½® globalDictData) åæ‰èƒ½æµ‹å‡ºå†·å¯åŠ¨æ€§èƒ½ã€‚');
+            console.log('è¯·è¿è¡Œ loadDict() å¹¶æŸ¥çœ‹æ§åˆ¶å°æ—¥å¿—ä¸­ "è¯åº“å…¨é‡è½½å…¥å†…å­˜è€—æ—¶" çš„è¾“å‡ºã€‚');
             return;
         }
 
-        // loadDict() ÄÚ²¿ÓĞ¼ÆÊ±²¢Êä³ö£¬Ö±½Óµ÷ÓÃ¼´¿É
+        // loadDict() å†…éƒ¨æœ‰è®¡æ—¶å¹¶è¾“å‡ºï¼Œç›´æ¥è°ƒç”¨å³å¯
         await window.loadDict();
-        console.log('? ´Ê¿â³õÊ¼»¯ÒÑÍê³É¡£Çë²é¿´¿ØÖÆÌ¨ÈÕÖ¾ÖĞµÄ "´Ê¿âÈ«Á¿ÔØÈëÄÚ´æºÄÊ±" Êä³ö¡£');
+        console.log('? è¯åº“åˆå§‹åŒ–å·²å®Œæˆã€‚è¯·æŸ¥çœ‹æ§åˆ¶å°æ—¥å¿—ä¸­çš„ "è¯åº“å…¨é‡è½½å…¥å†…å­˜è€—æ—¶" è¾“å‡ºã€‚');
     }
     
-    // ½«²âÊÔº¯Êı°ó¶¨µ½È«¾Ö¶ÔÏó
+    // å°†æµ‹è¯•å‡½æ•°ç»‘å®šåˆ°å…¨å±€å¯¹è±¡
     window.fakerRhymesPerformanceTests.runSearchLatencyTest = runSearchLatencyTest;
     window.fakerRhymesPerformanceTests.measureDictLoadTime = measureDictLoadTime;
-    window.fakerRhymesPerformanceTests.runCoreTest = () => runSearchLatencyTest('ÈË¹¤ÖÇÄÜ', 50);
+    window.fakerRhymesPerformanceTests.runCoreTest = () => runSearchLatencyTest('äººå·¥æ™ºèƒ½', 50);
 
-    console.log('? FakerRhymes ĞÔÄÜ²âÊÔ½Å±¾ [`js/performance-test.js`](js/performance-test.js) ÒÑÔØÈë¡£');
-    console.log('ÇëÔÚ¿ØÖÆÌ¨ÔËĞĞ `window.fakerRhymesPerformanceTests.runCoreTest()` ½øĞĞºËĞÄËÑË÷ÑÓ³Ù²âÊÔ¡£');
+    console.log('? FakerRhymes æ€§èƒ½æµ‹è¯•è„šæœ¬ [`js/performance-test.js`](js/performance-test.js) å·²è½½å…¥ã€‚');
+    console.log('è¯·åœ¨æ§åˆ¶å°è¿è¡Œ `window.fakerRhymesPerformanceTests.runCoreTest()` è¿›è¡Œæ ¸å¿ƒæœç´¢å»¶è¿Ÿæµ‹è¯•ã€‚');
 
 })();
