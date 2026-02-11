@@ -161,30 +161,103 @@ const cdnList = [
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
 
+			const btn = document.getElementById('loadDictBtn');
+			const originalBtnText = btn ? btn.innerHTML : '📚 加载词库';
+			
+			if (btn) {
+				btn.disabled = true;
+				btn.innerHTML = '<i class="ri-loader-4-line"></i> 准备中...';
+			}
+
 			try {
 				// 极致优化：不再写入 IndexedDB（写入太慢），直接将整个 JSON 载入内存
 				// 拆分成3个文件以提升加载性能
 				devLog('开始极速载入词库（3个文件）...');
 				const startTime = performance.now();
+
+				const files = [
+					{ url: './dict_part_1.json', size: 13297393 },
+					{ url: './dict_part_2.json', size: 14388764 },
+					{ url: './dict_part_3.json', size: 12302875 }
+				];
+				
+				const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+				let loadedSize = 0;
+				const progressMap = new Array(files.length).fill(0);
+
+				const updateProgress = () => {
+					if (!btn) return;
+					const currentLoaded = progressMap.reduce((acc, val) => acc + val, 0);
+					const percent = Math.min(99, Math.round((currentLoaded / totalSize) * 100));
+					btn.innerHTML = `<i class="ri-loader-4-line"></i> 载入中 ${percent}%`;
+				};
+
+				const fetchWithProgress = async (url, index) => {
+					const response = await fetch(url);
+					if (!response.ok) throw new Error(`加载失败: ${url}`);
+					
+					const reader = response.body.getReader();
+					const contentLength = +response.headers.get('Content-Length') || files[index].size;
+					
+					// 如果服务器返回了 Content-Length，可以用它来校准
+					if (contentLength && contentLength !== files[index].size) {
+						// 动态调整 (这里简单处理，尽量依赖预设值)
+					}
+
+					const chunks = [];
+					let receivedLength = 0;
+
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						chunks.push(value);
+						receivedLength += value.length;
+						progressMap[index] = receivedLength;
+						updateProgress();
+					}
+
+					const blob = new Blob(chunks);
+					const text = await blob.text();
+					return JSON.parse(text);
+				};
+				
+				const fetchAndParse = async (fileInfo, index) => {
+					const response = await fetch(fileInfo.url);
+					if (!response.ok) throw new Error(`加载失败: ${fileInfo.url}`);
+					
+					const contentLength = +response.headers.get('Content-Length') || fileInfo.size;
+					const reader = response.body.getReader();
+					
+					let receivedLength = 0;
+					const chunks = [];
+					
+					while(true) {
+						const {done, value} = await reader.read();
+						if (done) break;
+						chunks.push(value);
+						receivedLength += value.length;
+						progressMap[index] = receivedLength;
+						
+						// 更新总进度
+						const currentLoaded = progressMap.reduce((acc, val) => acc + val, 0);
+						const percent = Math.min(99, Math.round((currentLoaded / totalSize) * 100));
+						if (btn) btn.innerHTML = `<i class="ri-loader-4-line"></i> 载入中 ${percent}%`;
+					}
+					
+					const blob = new Blob(chunks);
+					const text = await blob.text();
+					return JSON.parse(text);
+				};
 				
 				// 并行加载3个拆分文件
-				const [response1, response2, response3] = await Promise.all([
-					fetch('./dict_part_1.json'),
-					fetch('./dict_part_2.json'),
-					fetch('./dict_part_3.json')
-				]);
-				
-				if (!response1.ok || !response2.ok || !response3.ok) {
-					throw new Error('加载词典文件失败');
-				}
-				
-				// 并行解析JSON
 				const [data1, data2, data3] = await Promise.all([
-					response1.json(),
-					response2.json(),
-					response3.json()
+					fetchAndParse(files[0], 0),
+					fetchAndParse(files[1], 1),
+					fetchAndParse(files[2], 2)
 				]);
 				
+				if (btn) btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
+
 				// 合并3个数据对象
 				const data = {...data1, ...data2, ...data3};
 				
@@ -217,9 +290,13 @@ const cdnList = [
 				devLog('词库全量载入内存耗时:', (performance.now() - startTime).toFixed(2), 'ms');
 				
 				// 更新 UI
-				const btn = document.getElementById('loadDictBtn');
-				if (btn) btn.innerHTML = `✅ 已就绪 (${globalDictData.size} 组)`;
-				
+				if (btn) {
+					btn.innerHTML = `✅ 词库已就绪`;
+					btn.disabled = true; // 加载成功后禁用
+					btn.style.cursor = 'default';
+					btn.style.opacity = '0.8';
+					btn.title = `已加载 ${globalDictData.size} 组词条`;
+				}
 				
 				const warning = document.getElementById('dictWarning');
 				if (warning) warning.style.display = 'none';
@@ -227,6 +304,12 @@ const cdnList = [
 			} catch (e) {
 				console.error('极速载入失败:', e);
 				window.isDictLoading = false;
+				
+				if (btn) {
+					btn.innerHTML = '❌ 加载失败 (点击重试)';
+					btn.disabled = false; // 失败允许重试
+					btn.classList.add('error');
+				}
 			}
 		};
 
@@ -1423,203 +1506,6 @@ const cdnList = [
 			if (window.triggerResultAnimation) window.triggerResultAnimation();
 		};
 
-		const loadOnlineDict = async () => {
-			const btn = document.getElementById('loadDictBtn');
-			const originalText = btn.textContent;
-			btn.innerHTML = '<i class="ri-loader-4-line"></i> 加载中...';
-			btn.disabled = true;
-
-			try {
-				if (typeof Worker === 'undefined') {
-					throw new Error('您的浏览器不支持 Web Worker，无法加载大词库');
-				}
-
-				const worker = new Worker('./js/dict-worker.js');
-				worker.onmessage = async (event) => {
-					const { type, message, data, percent, progress, loaded } = event.data;
-
-					if (type === 'progress') {
-						btn.textContent = `${message} ${percent ? percent + '%' : ''}`;
-					} else if (type === 'download_progress') {
-						if (percent !== undefined) {
-							btn.innerHTML = `<i class="ri-download-cloud-2-line"></i> 下载中: ${percent}%`;
-						} else {
-							btn.innerHTML = `<i class="ri-download-cloud-2-line"></i> 下载中: ${loaded}`;
-						}
-					} else if (type === 'parsing') {
-						btn.textContent = `解析存储中: ${progress || 0}%`;
-					} else if (type === 'success') {
-						const { chars } = data;
-						// 更新本地存储状态（仅用于显示）
-						localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
-						localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(chars.slice(0, 100))); // 仅存少量用于显示数量
-						localStorage.setItem('ONLINE_DICT_COUNT', chars.length.toString());
-						
-						// 重建索引
-						const keys = await getAllKeysFromDB();
-						bloomFilter = new BloomFilter(keys.length * 10, 3);
-						keys.forEach(k => bloomFilter.add(k));
-						
-						btn.textContent = `✓ 已加载`;
-						btn.style.background = 'rgba(34, 211, 238, 0.2)';
-						window.dictLoaded = true;
-						
-						setTimeout(() => {
-							btn.innerHTML = `✓ 已缓存`;
-							btn.disabled = false;
-							btn.style.background = '';
-							updateDictStatus();
-						}, 2000);
-						worker.terminate();
-					} else if (type === 'error') {
-						throw new Error(message);
-					}
-				};
-
-				worker.onerror = (err) => {
-					throw err;
-				};
-
-				worker.postMessage({
-					action: 'loadAndProcess',
-					payload: { 
-						dictSources: [
-							{ name: '优化词库-1', url: './dict_part_1.json' },
-							{ name: '优化词库-2', url: './dict_part_2.json' },
-							{ name: '优化词库-3', url: './dict_part_3.json' }
-						] 
-					}
-				});
-
-			} catch (err) {
-				console.error('词库加载失败:', err);
-				btn.textContent = `✗ ${err.message || '加载失败'}`;
-				btn.style.background = 'rgba(239, 68, 68, 0.2)';
-				setTimeout(() => {
-					btn.textContent = originalText;
-					btn.disabled = false;
-					btn.style.background = '';
-				}, 3000);
-			}
-		};
-
-		const loadOnlineDictFallback = async () => {
-			// Synchronous fallback for browsers without Web Worker support
-			const btn = document.getElementById('loadDictBtn');
-			const originalText = btn.textContent;
-
-			try {
-				// 并行加载3个拆分文件
-				const [response1, response2, response3] = await Promise.all([
-					fetch('./dict_part_1.json', { method: 'GET', headers: { 'Accept': 'application/json' } }),
-					fetch('./dict_part_2.json', { method: 'GET', headers: { 'Accept': 'application/json' } }),
-					fetch('./dict_part_3.json', { method: 'GET', headers: { 'Accept': 'application/json' } })
-				]);
-				
-				if (!response1.ok || !response2.ok || !response3.ok) {
-					throw new Error('加载词典文件失败');
-				}
-				
-				// 并行解析JSON
-				const [data1, data2, data3] = await Promise.all([
-					response1.json(),
-					response2.json(),
-					response3.json()
-				]);
-				
-				// 合并3个数据对象
-				const data = {...data1, ...data2, ...data3};
-
-				btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
-				const chars = new Set();
-				let stats = {
-					totalStrings: 0,
-					totalChars: 0,
-					uniqueChars: 0,
-					categories: 0
-				};
-
-				if (Array.isArray(data)) {
-					stats.categories = 1;
-					data.forEach((item, idx) => {
-						if (idx % 5000 === 0) {
-							btn.innerHTML = `<i class="ri-loader-4-line"></i> 解析中... ${Math.round((idx / data.length) * 100)}%`;
-						}
-						if (typeof item === 'string') {
-							stats.totalStrings++;
-							Array.from(item).forEach(ch => {
-								if (/[\u4e00-\u9fa5]/.test(ch)) {
-									stats.totalChars++;
-									chars.add(ch);
-								}
-							});
-						}
-					});
-				} else if (data && typeof data === 'object') {
-					const entries = Object.entries(data);
-					stats.categories = entries.length;
-					entries.forEach(([, value], idx) => {
-						if (idx % 500 === 0) {
-							btn.innerHTML = `<i class="ri-loader-4-line"></i> 解析中... ${Math.round((idx / entries.length) * 100)}%`;
-						}
-						if (Array.isArray(value)) {
-							stats.totalStrings += value.length;
-							value.forEach(item => {
-								if (typeof item === 'string') {
-									Array.from(item).forEach(ch => {
-										if (/[\u4e00-\u9fa5]/.test(ch)) {
-											stats.totalChars++;
-											chars.add(ch);
-										}
-									});
-								}
-							});
-						}
-					});
-				}
-
-				const charArray = Array.from(chars);
-				stats.uniqueChars = charArray.length;
-				
-				localStorage.setItem('ONLINE_DICT_CACHE', JSON.stringify(charArray));
-				localStorage.setItem('ONLINE_DICT_TIME', Date.now().toString());
-				localStorage.setItem('ONLINE_DICT_SOURCE', '本地优化词库');
-				localStorage.setItem('ONLINE_DICT_STATS', JSON.stringify(stats));
-
-				if (window.refreshRhymeBank) window.refreshRhymeBank();
-				bankMap = registerBank();
-
-				btn.textContent = `✓ 已加载 ${charArray.length} 字`;
-				btn.style.background = 'rgba(34, 211, 238, 0.2)';
-
-				const dictStatus = document.getElementById('dictStatus');
-				const dictStatusText = document.getElementById('dictStatusText');
-				dictStatus.style.display = 'block';
-				
-				let statusText = `<i class="ri-book-open-line"></i> 词库：${charArray.length} 个唯一汉字（本地优化词库）`;
-				if (stats.totalChars > 0) {
-					statusText += ` | 数据统计：${stats.categories.toLocaleString()} 分类，${stats.totalStrings.toLocaleString()} 条目，${stats.totalChars.toLocaleString()} 字符（去重前）`;
-				}
-				statusText += ` | ${new Date().toLocaleString('zh-CN')}`;
-				dictStatusText.textContent = statusText;
-
-				setTimeout(() => {
-					btn.innerHTML = `✓ 已缓存`;
-					btn.disabled = false;
-					btn.style.background = '';
-				}, 1500);
-			} catch (err) {
-				console.error('词库加载失败:', err);
-				btn.textContent = '✗ 加载失败';
-				btn.style.background = 'rgba(239, 68, 68, 0.2)';
-
-				setTimeout(() => {
-					btn.textContent = originalText;
-					btn.disabled = false;
-					btn.style.background = '';
-				}, 3000);
-			}
-		};
 
 		// Debounce 函数
 		const debounce = (func, delay) => {
@@ -1701,7 +1587,11 @@ const cdnList = [
 			});
 
 			const loadDictBtn = document.getElementById('loadDictBtn');
-			loadDictBtn.addEventListener('click', loadOnlineDict);
+			loadDictBtn.addEventListener('click', () => {
+				// 如果已经在加载中，不重复触发
+				if (window.isDictLoading) return;
+				loadDict();
+			});
 
 			const clearDictBtn = document.getElementById('clearDictBtn');
 			clearDictBtn.addEventListener('click', () => {
@@ -1710,23 +1600,6 @@ const cdnList = [
 				const originalText = clearDictBtn.innerHTML;
 				clearDictBtn.innerHTML = '<i class="ri-loader-4-line"></i> 清理中...';
 				clearDictBtn.disabled = true;
-
-				const worker = new Worker('./js/dict-worker.js');
-				
-				// 设置超时保护（10秒）
-				const timeoutId = setTimeout(() => {
-					console.warn('清理缓存超时，强制关闭');
-					worker.terminate();
-					handleClearCacheComplete();
-				}, 10000);
-
-				// 错误处理
-				worker.onerror = (error) => {
-					console.error('Worker 错误:', error);
-					clearTimeout(timeoutId);
-					worker.terminate();
-					handleClearCacheComplete();
-				};
 
 				const handleClearCacheComplete = () => {
 					// 清理 IndexedDB
@@ -1750,30 +1623,28 @@ const cdnList = [
 					
 					bloomFilter = new BloomFilter();
 					window.dictLoaded = false;
+					globalDictData = null; // 同时清理内存数据
 					
 					clearDictBtn.innerHTML = '<i class="ri-check-line"></i> 已清理';
 					updateDictStatus();
 					
+					// 恢复按钮状态以便再次加载
+					const loadDictBtn = document.getElementById('loadDictBtn');
+					if (loadDictBtn) {
+						loadDictBtn.disabled = false;
+						loadDictBtn.innerHTML = '📚 加载词库';
+						loadDictBtn.style.cursor = 'pointer';
+						loadDictBtn.style.opacity = '1';
+					}
+
 					setTimeout(() => {
 						clearDictBtn.innerHTML = originalText;
 						clearDictBtn.disabled = false;
 					}, 1500);
 				};
 
-				worker.onmessage = (event) => {
-					if (event.data.type === 'clearSuccess') {
-						clearTimeout(timeoutId);
-						worker.terminate();
-						handleClearCacheComplete();
-					} else if (event.data.type === 'error') {
-						console.error('清理错误:', event.data.message);
-						clearTimeout(timeoutId);
-						worker.terminate();
-						handleClearCacheComplete();
-					}
-				};
-				
-				worker.postMessage({ action: 'clearCache' });
+				// 由于移除了 Worker 缓存，直接清理本地存储和 IndexedDB
+				handleClearCacheComplete();
 			});
 
 			// AI Mode Logic

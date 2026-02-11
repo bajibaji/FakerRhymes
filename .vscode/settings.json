@@ -3,5 +3,6 @@
     "chat.tools.terminal.autoApprove": {
         "Set-Content": true,
         "dir": true
-    }
+    },
+    "markdown.validate.enabled": true
 }

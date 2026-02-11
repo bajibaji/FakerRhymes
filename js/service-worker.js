@@ -1,4 +1,6 @@
-const CACHE_NAME = 'fakerhymes-cache-v1';
+importScripts('version.js');
+
+const CACHE_NAME = 'fakerhymes-cache-' + APP_VERSION;
 const ASSETS = [
   './manifest.json',
   './dict_part_1.json',
