@@ -1,7 +1,9 @@
 // Version: v1.8.5
 importScripts('version.js');
+console.log('Debug: Service Worker initializing. Imported APP_VERSION =', typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'undefined');
 
 const CACHE_NAME = 'fakerhymes-cache-' + APP_VERSION;
+console.log('Debug: Service Worker CACHE_NAME =', CACHE_NAME);
 const ASSETS = [
   './manifest.json',
   './dict_part_1.json',
