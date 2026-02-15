@@ -5,10 +5,10 @@ console.log('Debug: Service Worker initializing. Imported APP_VERSION =', typeof
 const CACHE_NAME = 'fakerhymes-cache-' + APP_VERSION;
 console.log('Debug: Service Worker CACHE_NAME =', CACHE_NAME);
 const ASSETS = [
-  './manifest.json',
-  './dict_part_1.json',
-  './dict_part_2.json',
-  './dict_part_3.json'
+  '../manifest.json',
+  '../dict_part_1.json',
+  '../dict_part_2.json',
+  '../dict_part_3.json'
 ];
 
 self.addEventListener('install', (event) => {
