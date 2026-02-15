@@ -1,3 +1,4 @@
+// Version: v1.8.5
 importScripts('version.js');
 
 const CACHE_NAME = 'fakerhymes-cache-' + APP_VERSION;
