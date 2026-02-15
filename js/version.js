@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.8.2';
+const APP_VERSION = 'v1.8.5';
 
 // Auto-update DOM if running in browser
 if (typeof document !== 'undefined') {

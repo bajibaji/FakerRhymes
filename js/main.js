@@ -170,6 +170,27 @@ const cdnList = [
 			}
 
 			try {
+				// 尝试初始化数据库，如果已存在则不需要加载 JSON
+				try {
+					const db = await window.dbManager.init();
+					if (await window.dbManager.checkDataExists()) {
+						devLog('SQLite 数据库已准备就绪，跳过 JSON 加载');
+						window.dictLoaded = true;
+						window.isDictLoading = false;
+						
+						if (btn) {
+							btn.innerHTML = `✅ 词库已就绪 (SQLite)`;
+							btn.disabled = true;
+							btn.style.cursor = 'default';
+							btn.style.opacity = '0.8';
+							btn.title = `已加载数据库`;
+						}
+						return;
+					}
+				} catch (e) {
+					console.warn('SQLite 初始化检查失败，回退到 JSON 加载:', e);
+				}
+
 				// 极致优化：不再写入 IndexedDB（写入太慢），直接将整个 JSON 载入内存
 				// 拆分成3个文件以提升加载性能
 				devLog('开始极速载入词库（3个文件）...');
@@ -250,7 +271,7 @@ const cdnList = [
 				};
 				
 				// 并行加载3个拆分文件
-				const [data1, data2, data3] = await Promise.all([
+				const datasets = await Promise.all([
 					fetchAndParse(files[0], 0),
 					fetchAndParse(files[1], 1),
 					fetchAndParse(files[2], 2)
@@ -258,44 +279,91 @@ const cdnList = [
 				
 				if (btn) btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
 
-				// 合并3个数据对象
-				const data = {...data1, ...data2, ...data3};
+				// 初始化 SQLite 数据库
+				const db = await window.dbManager.init();
 				
-				// 预处理 Key
-				globalDictData = new Map();
-				suffixIndex = new Map(); // 重置后缀索引
-				
-				for (const key in data) {
-					const encoded = encodeKey(key);
-					globalDictData.set(encoded, data[key]);
+				// 检查是否需要导入数据
+				if (!(await window.dbManager.checkDataExists())) {
+					devLog('开始导入数据到 SQLite...');
 					
-					// 修改索引逻辑：使用末尾 1 个编码字符作为索引键（通常是韵母编码+声调，共2位）
-					// e.g. "废壳" -> "ei4_e2" -> encodeKey -> "e4v2"
-					// 末尾字是 "v2"，长度为 2
-					if (encoded.length >= 2) {
-						const suffix = encoded.slice(-2);
-						if (!suffixIndex.has(suffix)) suffixIndex.set(suffix, []);
-						suffixIndex.get(suffix).push(encoded);
+					let batchData = [];
+					let processedCount = 0;
+					const CHUNK_SIZE = 2000; // 降低批处理大小 (10k -> 2k)，防止长时间占用主线程
+					
+					for (let i = 0; i < datasets.length; i++) {
+						const dataset = datasets[i];
+						if (!dataset) continue;
+						
+						const keys = Object.keys(dataset);
+						
+						for (let j = 0; j < keys.length; j++) {
+							const key = keys[j];
+							const encoded = encodeKey(key);
+							const suffix = encoded.length >= 2 ? encoded.slice(-2) : '';
+							
+							if (Array.isArray(dataset[key])) {
+								for (const phrase of dataset[key]) {
+									batchData.push({
+										phrase: phrase,
+										length: phrase.length,
+										encoded_key: encoded,
+										suffix_2: suffix
+									});
+								}
+							}
+							
+							// 分批插入，避免阻塞主线程
+							if (batchData.length >= CHUNK_SIZE) {
+								await window.dbManager.insertChunk(batchData);
+								processedCount += batchData.length;
+								batchData = [];
+								
+								// 每次 chunk 插入后都更新 UI 并让出主线程，不再跳过
+								if (btn) btn.innerHTML = `<i class="ri-database-2-line"></i> 导入中 ${(i * 33 + (j / keys.length) * 33).toFixed(0)}%...`;
+								
+								// 增加延时 (0ms -> 5ms)，确保浏览器有足够时间渲染帧
+								await new Promise(resolve => setTimeout(resolve, 5));
+							}
+						}
+						
+						// 显式释放内存
+						datasets[i] = null;
 					}
+					
+					// 插入剩余数据
+					if (batchData.length > 0) {
+						await window.dbManager.insertChunk(batchData);
+						processedCount += batchData.length;
+					}
+					
+					// 显式保存到 IndexedDB
+					if (btn) btn.innerHTML = '<i class="ri-save-3-line"></i> 正在写入硬盘...';
+					await new Promise(resolve => setTimeout(resolve, 50)); 
+					
+					// 强制在下一次事件循环中执行 save，防止卡死当前渲染帧
+					await new Promise(async (resolve) => {
+						try {
+							await window.dbManager.save();
+						} catch(e) { console.error(e); }
+						resolve();
+					});
+					
+					devLog(`已导入 ${processedCount} 条数据到 SQLite`);
+				} else {
+					devLog('SQLite 数据库已存在数据，跳过导入');
 				}
 				
-				// --- 核心修复：重建索引供长词匹配查询使用 ---
-				const keys = Array.from(globalDictData.keys());
-				bloomFilter = new BloomFilter(keys.length * 10, 3);
-				keys.forEach(k => bloomFilter.add(k));
-				// ------------------------------------------
-
 				window.dictLoaded = true;
 				window.isDictLoading = false;
-				devLog('词库全量载入内存耗时:', (performance.now() - startTime).toFixed(2), 'ms');
+				devLog('词库就绪耗时:', (performance.now() - startTime).toFixed(2), 'ms');
 				
 				// 更新 UI
 				if (btn) {
-					btn.innerHTML = `✅ 词库已就绪`;
+					btn.innerHTML = `✅ 词库已就绪 (SQLite)`;
 					btn.disabled = true; // 加载成功后禁用
 					btn.style.cursor = 'default';
 					btn.style.opacity = '0.8';
-					btn.title = `已加载 ${globalDictData.size} 组词条`;
+					btn.title = `已加载数据库`;
 				}
 				
 				const warning = document.getElementById('dictWarning');
@@ -313,11 +381,14 @@ const cdnList = [
 			}
 		};
 
-		// 极速获取数据函数
+		// 极速获取数据函数 (兼容性保留，实际查询已迁移到 SQLite)
 		async function getFromDB(key) {
-			// 优先从内存 Map 中获取，这是毫秒级的
-			if (globalDictData && globalDictData.has(key)) {
-				return globalDictData.get(key);
+			// 查询 SQLite
+			if (window.dbManager) {
+				const results = await window.dbManager.queryExact(key);
+				if (results && results.length > 0) {
+					return results.map(row => row.phrase);
+				}
 			}
 			return null;
 		}
@@ -556,12 +627,45 @@ const cdnList = [
 			
 			// 优化方案：移动端优先，只使用精准哈希查询
 			let suffixMatchCount = 0;
+			
+			// 批量查询所有变体
+			const variantKeys = Array.from(queryVariantSet);
+			
+			// 1. 精确匹配（通过 SQLite IN 查询）
+			// 将查询分批进行，避免 SQL 语句过长
+			const BATCH_SIZE = 100;
+			for (let i = 0; i < variantKeys.length; i += BATCH_SIZE) {
+				const batch = variantKeys.slice(i, i + BATCH_SIZE);
+				const results = await window.dbManager.queryByKeys(batch);
+				
+				for (const row of results) {
+					const phrase = row.phrase;
+					const phraseLen = phrase.length; // SQLite length column
+					if (!matchedByWordCount[phraseLen]) {
+						matchedByWordCount[phraseLen] = [];
+					}
+					if (!matchedByWordCount[phraseLen].includes(phrase)) {
+						matchedByWordCount[phraseLen].push(phrase);
+					}
+				}
+			}
+
+			// 2. 后缀匹配（更长的词）
+			// 性能优化：只有在查询键长度 > 1 (即 2 字词或以上) 时才进行后缀匹配
 			for (const qk of queryVariantSet) {
-			// 1. 精确匹配（相同长度）
-			const candidates = await getFromDB(qk);
-				if (candidates && Array.isArray(candidates)) {
-					for (const phrase of candidates) {
-						const phraseLen = Array.from(phrase).length;
+				if (qk.length >= 2) {
+					// 使用 pattern 参数进行严格后缀匹配，利用数据库过滤非目标结果
+					// 这样可以避免 LIMIT 200 截断了有效的长词结果
+					const suffix = qk.slice(-2);
+					const results = window.dbManager.querySuffix(suffix, sourceLength, '%' + qk);
+					
+					suffixMatchCount += results.length;
+					
+					for (const row of results) {
+						const phrase = row.phrase;
+						// 无需再次验证 encoded.endsWith(qk)，因为数据库 LIKE 已经保证了这一点
+						
+						const phraseLen = phrase.length;
 						if (!matchedByWordCount[phraseLen]) {
 							matchedByWordCount[phraseLen] = [];
 						}
@@ -570,38 +674,9 @@ const cdnList = [
 						}
 					}
 				}
-
-				// 2. 后缀匹配（更长的词）
-				// 性能优化：只有在查询键长度 > 1 (即 2 字词或以上) 时才进行后缀匹配，且 Tier 2 模式下限制匹配数量
-				// 同时，如果当前 queryVariantSet 已经很大，则进一步限制后缀搜索深度
-				if (qk.length >= 2) {
-					const suffix = qk.slice(-2);
-					const longerKeys = suffixIndex.get(suffix) || [];
-					
-					// 针对 Tier 2 优化：如果候选键太多，只处理前 500 个，平衡性能与结果丰富度
-					const limitedKeys = (tier >= 2 && longerKeys.length > 500) ? longerKeys.slice(0, 500) : longerKeys;
-					
-					suffixMatchCount += limitedKeys.length;
-					for (const lk of limitedKeys) {
-						// 严格匹配整个 qk 作为后缀，且长度更长
-						if (lk.endsWith(qk) && lk.length > qk.length) {
-							const moreCandidates = await getFromDB(lk);
-							if (moreCandidates && Array.isArray(moreCandidates)) {
-								for (const phrase of moreCandidates) {
-									const phraseLen = Array.from(phrase).length;
-									if (!matchedByWordCount[phraseLen]) {
-										matchedByWordCount[phraseLen] = [];
-									}
-									if (!matchedByWordCount[phraseLen].includes(phrase)) {
-										matchedByWordCount[phraseLen].push(phrase);
-									}
-								}
-							}
-						}
-					}
-				}
 			}
-			devLog(`[Tier ${tier}] 后缀索引检查总次数: ${suffixMatchCount}`);
+			
+			devLog(`[Tier ${tier}] 后缀查询完成，检查数: ${suffixMatchCount}`);
 
 			// 如果内存中查不到，且此时词库还没加载，自动触发一次极速加载
 			if (Object.keys(matchedByWordCount).length === 0 && !window.dictLoaded) {
@@ -734,6 +809,7 @@ const cdnList = [
 		for (const len of moreLengthCandidates) {
 			moreLengthResults.push(...matchedByWordCount[len]);
 		}
+		console.log(`queryDict结果: sameLength=${sameLengthResults.length}, moreLengths=${moreLengthResults.length}, sourceLength=${sourceLength}`);
 		
 		return {
 			sameLength: sameLengthResults.length > 0 ? sameLengthResults : [],
@@ -815,9 +891,13 @@ const cdnList = [
 				maxTierFound = Math.max(maxTierFound, currentMatchTier);
 
 				// 声母类型过滤 (非平翘舌音不匹配平翘舌音)
+				// 对于更多匹配结果，放松这个限制以显示更多选项
 				const srcIsSpecial = specialInitials.includes(src.ini);
 				const matchIsSpecial = specialInitials.includes(pInfo.ini);
-				if (!srcIsSpecial && matchIsSpecial) return -1;
+				if (!srcIsSpecial && matchIsSpecial) {
+					// 只在严格模式下才严格过滤
+					if (tierLimit === 0) return -1;
+				}
 			}
 			return maxTierFound;
 		};
@@ -972,13 +1052,13 @@ const cdnList = [
 
 		const process = async () => {
 		const goBtn = document.getElementById('go');
-		const src = document.getElementById('source').value.trim();
-		const looseness = Number(document.getElementById('looseness').value);
-		const isAiMode = document.getElementById('aiMode').checked;
-		const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
-		
-		// Show loading state
-		goBtn.classList.add('loading');
+		try {
+			const src = document.getElementById('source').value.trim();
+			const looseness = Number(document.getElementById('looseness').value);
+			const isAiMode = document.getElementById('aiMode').checked;
+			
+			// Show loading state
+			goBtn.classList.add('loading');
 		if (!goBtn.querySelector('.btn-text')) {
 			goBtn.innerHTML = '<span class="btn-text">' + goBtn.textContent + '</span>';
 		}
@@ -1158,10 +1238,14 @@ const cdnList = [
 		currentInfos = newInfos;
 		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
 		
-		// Remove loading state
-		setTimeout(() => {
-			goBtn.classList.remove('loading');
-		}, 100);
+		} catch (error) {
+			console.error('执行失败:', error);
+		} finally {
+			// 确保移除加载状态
+			setTimeout(() => {
+				goBtn.classList.remove('loading');
+			}, 100);
+		}
 	};
 
 	// 更新单个字符的声调或韵母
@@ -1384,9 +1468,14 @@ const cdnList = [
 				moreMatches.forEach(phrase => {
 					if (!phrase) return;
 					
-					// 增加一致性过滤：确保更多匹配结果也符合严格的韵脚/声母规则
-					// 修复：之前这里漏掉了 phraseFitsSource 检查，导致一些不符合声母规则的词（如平翘舌不匹配）出现在更多结果中
-					if (!phraseFitsSource(phrase, infos, looseness)) return;
+					// 增加一致性过滤：确保更多匹配结果也符合韵脚规则
+					// 对于更多匹配结果，使用更宽松的过滤以显示更多选项
+					const matchTier = getPhraseMatchTier(phrase, infos, looseness);
+					if (matchTier === -1) return;
+					
+					// 在较低宽松度下，可以接受中等匹配及以上的结果
+					const tierLimit = getLoosenessTier(looseness);
+					if (matchTier > Math.min(tierLimit + 1, 2)) return;
 
 					const tail = phrase.slice(-2);
 					if (!tailGroups[tail]) {
@@ -1602,11 +1691,20 @@ const cdnList = [
 				clearDictBtn.disabled = true;
 
 				const handleClearCacheComplete = () => {
+					// 关闭并清理 SQLite 数据库连接
+					if (window.dbManager && window.dbManager.reset) {
+						window.dbManager.reset();
+					}
+
 					// 清理 IndexedDB
 					try {
-						const deleteRequest = indexedDB.deleteDatabase('FakerRhymesDB');
+						// 清理旧的 DB (如果存在)
+						try { indexedDB.deleteDatabase('FakerRhymesDB'); } catch(e) {}
+						
+						// 清理新的 SQLite DB
+						const deleteRequest = indexedDB.deleteDatabase('RhymeSQLiteDB');
 						deleteRequest.onsuccess = () => {
-							console.log('IndexedDB 清理成功');
+							console.log('SQLite IndexedDB 清理成功');
 						};
 						deleteRequest.onerror = (err) => {
 							console.warn('IndexedDB 清理失败:', err);

@@ -5,6 +5,8 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
 	<title>废壳韵脚生成器 </title>
 	<script src="js/version.js"></script>
+	<!-- 引入 sql.js WASM -->
+	<script src="js/lib/sql-wasm.min.js"></script>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -78,7 +80,7 @@
 					</div>
 				</div>
 
-				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*第一次使用前请先加载词库*</div>
+				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*初次使用加载词库会有点慢喔*</div>
 				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
 				<div class="hint">- 越宽松需要查询的时间越长，请耐心等待</div>
@@ -197,6 +199,8 @@
 
 	<script src="./js/data.js" defer></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer onerror="console.warn('GSAP CDN加载失败')"></script>
+	<script src="./js/data.js" defer></script>
+	<script src="./js/db.js" defer></script>
 	<script src="./js/animations.js" defer></script>
 	<script src="./js/main.js" defer></script>
 	<script src="./js/sw-init.js" defer></script>
