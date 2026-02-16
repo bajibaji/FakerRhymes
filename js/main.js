@@ -657,7 +657,7 @@ const cdnList = [
 					// 使用 pattern 参数进行严格后缀匹配，利用数据库过滤非目标结果
 					// 这样可以避免 LIMIT 200 截断了有效的长词结果
 					const suffix = qk.slice(-2);
-					const results = window.dbManager.querySuffix(suffix, sourceLength, '%' + qk);
+					const results = await window.dbManager.querySuffix(suffix, sourceLength, '%' + qk);
 					
 					suffixMatchCount += results.length;
 					

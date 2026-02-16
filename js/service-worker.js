@@ -8,7 +8,16 @@ const ASSETS = [
   '../manifest.json',
   '../dict_part_1.json',
   '../dict_part_2.json',
-  '../dict_part_3.json'
+  '../dict_part_3.json',
+  '../index.html',
+  '../css/style.css',
+  './main.js',
+  './db.js',
+  './worker-db.js',
+  './data.js',
+  './animations.js',
+  './lib/sql-wasm.min.js',
+  './lib/sql-wasm.wasm'
 ];
 
 self.addEventListener('install', (event) => {
