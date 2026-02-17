@@ -5,7 +5,6 @@ console.log('Debug: Service Worker initializing. Imported APP_VERSION =', typeof
 const CACHE_NAME = 'fakerhymes-cache-' + APP_VERSION;
 console.log('Debug: Service Worker CACHE_NAME =', CACHE_NAME);
 const ASSETS = [
-  '../manifest.json',
   '../dict_part_1.json',
   '../dict_part_2.json',
   '../dict_part_3.json',
@@ -36,11 +35,15 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // 大文件（词库）单独处理：缓存优先 + 后台静默更新
-  // 目的：避免每次刷新/进入都重新下载词典文件，显著降低服务器流量。
-  if (url.pathname.endsWith('/dict_part_1.json') || 
-      url.pathname.endsWith('/dict_part_2.json') || 
-      url.pathname.endsWith('/dict_part_3.json')) {
+  // 只缓存词典和 WASM 文件
+  const isDictFile = url.pathname.endsWith('/dict_part_1.json') ||
+                     url.pathname.endsWith('/dict_part_2.json') ||
+                     url.pathname.endsWith('/dict_part_3.json');
+  const isWasmFile = url.pathname.includes('sql-wasm.min.js') ||
+                     url.pathname.includes('sql-wasm.wasm');
+
+  if (isDictFile || isWasmFile) {
+    // 缓存优先 + 后台更新
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request);
@@ -68,21 +71,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 全部改为网络优先（Network-First）策略
-  // 优先尝试网络请求，获取最新版本并更新缓存；如果网络断开，则回退到缓存
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        return response;
-      })
-      .catch(() => {
-        // 网络请求失败，尝试从缓存读取
-        if (request.mode === 'navigate') {
-           return caches.match(request).then((cached) => cached || caches.match('./index.html'));
-        }
-        return caches.match(request);
-      })
-  );
+  // 其他文件：不缓存，直接走网络
+  // 不调用 event.respondWith()，让浏览器直接请求
 });

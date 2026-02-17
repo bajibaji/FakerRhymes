@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.8.8';
+const APP_VERSION = 'v1.9.0';
 console.log('Debug: version.js loaded, APP_VERSION =', APP_VERSION);
 
 // Auto-update DOM if running in browser

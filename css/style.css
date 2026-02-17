@@ -211,6 +211,28 @@
     .blob-2 { bottom: -10%; right: -15%; width: 40vw; height: 40vw; background: var(--accent-2); opacity: 0.18; }
     .blob-3 { top: 40%; left: 30%; width: 30vw; height: 30vw; background: #3b82f6; opacity: 0.12; }
 
+    /* 移动端性能优化与结果动画基础状态 */
+    @media (max-width: 768px) {
+      .bg-blob {
+        filter: blur(40px) !important;
+        opacity: 0.3 !important;
+      }
+      .blob-3, #particles-canvas, .cursor-glow {
+        display: none !important;
+      }
+      body::before {
+        opacity: 0.4 !important;
+      }
+      .btn {
+        padding: 14px 20px !important;
+      }
+    }
+
+    .output span {
+      display: inline-block;
+      will-change: transform, opacity, filter;
+    }
+
     .btn.ghost {
       background: transparent;
       color: var(--text);
@@ -1036,11 +1058,11 @@
 		}
 		
 		.btn.loading .btn-text {
-			opacity: 0.5;
+			opacity: 0;
 		}
-		
-		.btn.loading::after {
-			content: '';
+
+		.btn .spinner {
+			display: none;
 			position: absolute;
 			top: 50%;
 			left: 50%;
@@ -1053,6 +1075,14 @@
 			animation: spin 0.6s linear infinite;
 		}
 		
+		.btn.loading .spinner {
+			display: block;
+		}
+		
+		/* 移除旧的伪元素加载逻辑，由 .spinner 替代 */
+		/* .btn.loading::after { ... }
+		   注意：这里不应再有 ::after 负责显示 spinner */
+
 		@keyframes spin {
 			0% { transform: rotate(0deg); }
 			100% { transform: rotate(360deg); }
@@ -1536,6 +1566,407 @@
         backdrop-filter: blur(0) contrast(1);
         -webkit-backdrop-filter: blur(0) contrast(1);
         background-color: transparent;
+      }
+    }
+
+    /* =========================================
+       P0: 按钮光泽扫过动画
+       ========================================= */
+    .btn:not(.loading)::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.4),
+        transparent
+      );
+      transform: skewX(-20deg);
+      transition: left 0.6s ease;
+      pointer-events: none;
+    }
+
+    .btn:not(.loading):hover::after {
+      left: 100%;
+    }
+
+    .btn.ghost::after {
+      display: none;
+    }
+
+    /* =========================================
+       P0: 面板进入动画
+       ========================================= */
+    @keyframes fadeSlideUp {
+      0% {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .panel {
+      animation: fadeSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 0;
+    }
+
+    .panel:nth-child(1) {
+      animation-delay: 0.1s;
+    }
+
+    .panel:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .panel:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    .panel:nth-child(4) {
+      animation-delay: 0.4s;
+    }
+
+    /* =========================================
+       P0: 输出结果打字机效果
+       ========================================= */
+    @keyframes typewriter {
+      from {
+        width: 0;
+      }
+      to {
+        width: 100%;
+      }
+    }
+
+    @keyframes blink {
+      0%, 50% {
+        border-color: var(--accent-2);
+      }
+      51%, 100% {
+        border-color: transparent;
+      }
+    }
+
+    .output.typing {
+      overflow: hidden;
+      white-space: nowrap;
+      border-right: 3px solid var(--accent-2);
+      animation: typewriter 0.05s steps(1) forwards,
+                 blink 0.8s step-end infinite;
+    }
+
+    .output.typing-done {
+      border-right: none;
+      white-space: normal;
+      overflow: visible;
+    }
+
+    /* =========================================
+       P1: 标题渐变文字
+       ========================================= */
+    h1::after {
+      content: "";
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      width: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: 2px;
+      animation: titleUnderline 1s ease-out forwards;
+    }
+
+    @keyframes titleUnderline {
+      0% {
+        width: 0;
+        opacity: 0;
+      }
+      100% {
+        width: 60px;
+        opacity: 1;
+      }
+    }
+
+    /* 版本标签徽章 */
+    h1 span[style*="font-size: 0.5em"] {
+      display: inline-block;
+      padding: 2px 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 5px;
+      font-size: 12px !important;
+      font-weight: 600;
+      color: white !important;
+      -webkit-text-fill-color: white !important;
+      margin-left: 8px;
+      vertical-align: middle;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+    }
+
+    /* =========================================
+       P1: 面板渐变边框
+       ========================================= */
+    .panel {
+      position: relative;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(
+        135deg,
+        rgba(124, 58, 237, 0.4),
+        rgba(34, 211, 238, 0.4),
+        rgba(124, 58, 237, 0.4)
+      );
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      opacity: 0.6;
+      transition: opacity 0.3s ease;
+    }
+
+    .panel:hover::before {
+      opacity: 1;
+    }
+
+    /* =========================================
+       P1: 表格悬停高亮
+       ========================================= */
+    tbody tr {
+      transition: all 0.2s ease;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    tbody tr:hover {
+      background: rgba(124, 58, 237, 0.1);
+      transform: scale(1.01);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    tbody tr:hover td {
+      color: var(--text);
+    }
+
+    tbody tr td:hover {
+      background: rgba(34, 211, 238, 0.15);
+      color: var(--accent-2);
+      font-weight: 500;
+    }
+
+    /* =========================================
+       P2: 徽章脉冲效果
+       ========================================= */
+    .badge {
+      animation: badgePulse 2s ease-in-out infinite;
+    }
+
+    @keyframes badgePulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4);
+      }
+      50% {
+        box-shadow: 0 0 0 6px rgba(124, 58, 237, 0);
+      }
+    }
+
+    .badge:hover {
+      animation: none;
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+    }
+
+    /* =========================================
+       P2: 粒子背景系统
+       ========================================= */
+    #particles-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      opacity: 0.5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #particles-canvas {
+        display: none;
+      }
+    }
+
+    /* =========================================
+       额外美化：按钮涟漪效果
+       ========================================= */
+    .btn .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      transform: scale(0);
+      animation: rippleEffect 0.6s linear;
+      pointer-events: none;
+    }
+
+    @keyframes rippleEffect {
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+
+    /* =========================================
+       额外美化：输入框浮动标签
+       ========================================= */
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper label {
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      color: var(--muted);
+      transition: all 0.3s ease;
+      pointer-events: none;
+      background: transparent;
+    }
+
+    .input-wrapper textarea:focus + label,
+    .input-wrapper textarea:not(:placeholder-shown) + label {
+      top: -10px;
+      left: 10px;
+      font-size: 12px;
+      color: var(--accent-2);
+      background: var(--bg);
+      padding: 0 6px;
+    }
+
+    /* =========================================
+       额外美化：链接下划线动画
+       ========================================= */
+    .hint a,
+    .modal-content a {
+      position: relative;
+      text-decoration: none;
+      color: var(--accent-2);
+    }
+
+    .hint a::after,
+    .modal-content a::after {
+      content: "";
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 0;
+      height: 1px;
+      background: var(--accent-2);
+      transition: width 0.3s ease;
+    }
+
+    .hint a:hover::after,
+    .modal-content a:hover::after {
+      width: 100%;
+    }
+
+    /* =========================================
+       额外美化：图标动画
+       ========================================= */
+    .btn i,
+    .help-btn i {
+      transition: transform 0.3s ease;
+    }
+
+    .btn:hover i {
+      transform: scale(1.1);
+    }
+
+    .help-btn:hover i {
+      transform: rotate(90deg);
+    }
+
+    /* =========================================
+       额外美化：复选框美化
+       ========================================= */
+    input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      background: var(--card);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    input[type="checkbox"]:checked {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-color: var(--accent);
+    }
+
+    input[type="checkbox"]:checked::after {
+      content: "✓";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    input[type="checkbox"]:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+    }
+
+    /* =========================================
+       额外美化：主按钮脉冲边框
+       ========================================= */
+    #go {
+      position: relative;
+    }
+
+    #go::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: inherit;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2), var(--accent));
+      z-index: -1;
+      animation: pulseBorder 2s linear infinite;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #go:hover::before {
+      opacity: 1;
+    }
+
+    @keyframes pulseBorder {
+      0% {
+        background-position: 0% 50%;
+      }
+      100% {
+        background-position: 200% 50%;
       }
     }
 

@@ -1,4 +1,8 @@
-const cdnList = [
+const devLog = (...args) => {
+			console.log('[Dev]', ...args);
+		};
+
+		const cdnList = [
 			'https://unpkg.com/pinyin-pro@3.27.0/dist/index.js',
 			'https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js',
 			// 如果需要本地备用，将 pinyin-pro.umd.js 放在同目录并取消下一行注释
@@ -32,6 +36,7 @@ const cdnList = [
 		let dict = null; // 优化字典
 		let suffixIndex = new Map(); // 新增：后缀索引，用于支持更长词匹配
 		let locks = [];
+		let currentSearchId = 0; // 搜索任务 ID，用于中断旧任务
 
 		// IndexedDB helpers
 		const DB_NAME = 'FakerRhymesDB';
@@ -193,7 +198,7 @@ const cdnList = [
 
 				// 极致优化：不再写入 IndexedDB（写入太慢），直接将整个 JSON 载入内存
 				// 拆分成3个文件以提升加载性能
-				devLog('开始极速载入词库（3个文件）...');
+				
 				const startTime = performance.now();
 
 				const files = [
@@ -548,8 +553,23 @@ const cdnList = [
 
 		// 从字典查询拼音组合对应的词组（新算法）
 		// 使用最后两个字的韵脚为查询条件，返回所有相关匹配
-		const queryDict = async (infos, looseness) => {
+		const queryDict = async (infos, looseness, onIncrementalUpdate = null, searchId = 0) => {
 			if (!infos || infos.length === 0) return null;
+
+			const emit = (res, isFinal = false) => {
+				// 核心：如果当前的 searchId 已经不是全局最新的，说明任务已过时，直接中断
+				if (searchId !== currentSearchId) return false;
+				
+				if (onIncrementalUpdate) {
+					onIncrementalUpdate({
+						sameLength: res.sameLength || [],
+						moreLengths: res.moreLengths || [],
+						lessLength: res.lessLength || [],
+						isFinal
+					});
+				}
+				return true;
+			};
 			
 			// 1. 核心极速逻辑：如果 Bloom Filter 还没准备好，尝试触发懒加载
 			if (!window.dictLoaded && !window.isDictLoading) {
@@ -631,8 +651,7 @@ const cdnList = [
 			// 批量查询所有变体
 			const variantKeys = Array.from(queryVariantSet);
 			
-			// 1. 精确匹配（通过 SQLite IN 查询）
-			// 将查询分批进行，避免 SQL 语句过长
+			// 1. 精确匹配（通过 SQLite IN 查询）- 这部分非常快
 			const BATCH_SIZE = 100;
 			for (let i = 0; i < variantKeys.length; i += BATCH_SIZE) {
 				const batch = variantKeys.slice(i, i + BATCH_SIZE);
@@ -640,43 +659,62 @@ const cdnList = [
 				
 				for (const row of results) {
 					const phrase = row.phrase;
-					const phraseLen = phrase.length; // SQLite length column
-					if (!matchedByWordCount[phraseLen]) {
-						matchedByWordCount[phraseLen] = [];
-					}
-					if (!matchedByWordCount[phraseLen].includes(phrase)) {
-						matchedByWordCount[phraseLen].push(phrase);
-					}
+					const phraseLen = phrase.length;
+					if (!matchedByWordCount[phraseLen]) matchedByWordCount[phraseLen] = [];
+					if (!matchedByWordCount[phraseLen].includes(phrase)) matchedByWordCount[phraseLen].push(phrase);
 				}
 			}
 
-			// 2. 后缀匹配（更长的词）
-			// 性能优化：只有在查询键长度 > 1 (即 2 字词或以上) 时才进行后缀匹配
-			for (const qk of queryVariantSet) {
-				if (qk.length >= 2) {
-					// 使用 pattern 参数进行严格后缀匹配，利用数据库过滤非目标结果
-					// 这样可以避免 LIMIT 200 截断了有效的长词结果
-					const suffix = qk.slice(-2);
-					const results = await window.dbManager.querySuffix(suffix, sourceLength, '%' + qk);
-					
-					suffixMatchCount += results.length;
-					
-					for (const row of results) {
-						const phrase = row.phrase;
-						// 无需再次验证 encoded.endsWith(qk)，因为数据库 LIKE 已经保证了这一点
+			// 立即渲染第一批结果（精确匹配）
+			const getCategorized = () => {
+				const res = { sameLength: [], moreLengths: [], lessLength: [] };
+				Object.keys(matchedByWordCount).forEach(len => {
+					const l = Number(len);
+					if (l === sourceLength) res.sameLength.push(...matchedByWordCount[len]);
+					else if (l > sourceLength) res.moreLengths.push(...matchedByWordCount[len]);
+					else if (l === sourceLength - 1) res.lessLength.push(...matchedByWordCount[len]);
+				});
+				return res;
+			};
+			
+			emit(getCategorized());
+
+			// 2. 后缀匹配（模糊查询，较慢）- 开启增量模式
+			// 只有在查询键长度 >= 2 时才进行，因为 LIKE '%x' 这种单字后缀在十几万条数据中太慢了
+			if (queryVariantSet.size > 0) {
+				let countSinceLastEmit = 0;
+				for (const qk of queryVariantSet) {
+					// 检查是否被中断
+					if (searchId !== currentSearchId) return null;
+
+					if (qk.length >= 2) {
+						const suffix = qk.slice(-2);
+						const results = await window.dbManager.querySuffix(suffix, sourceLength, '%' + qk);
+						suffixMatchCount += results.length;
 						
-						const phraseLen = phrase.length;
-						if (!matchedByWordCount[phraseLen]) {
-							matchedByWordCount[phraseLen] = [];
+						for (const row of results) {
+							const phrase = row.phrase;
+							const phraseLen = phrase.length;
+							if (!matchedByWordCount[phraseLen]) matchedByWordCount[phraseLen] = [];
+							if (!matchedByWordCount[phraseLen].includes(phrase)) {
+								matchedByWordCount[phraseLen].push(phrase);
+								countSinceLastEmit++;
+							}
 						}
-						if (!matchedByWordCount[phraseLen].includes(phrase)) {
-							matchedByWordCount[phraseLen].push(phrase);
+
+						// 每搜出 50 个新词，或者每处理一定数量的 key，就更新一次 UI
+						if (countSinceLastEmit >= 50) {
+							if (!emit(getCategorized())) return null;
+							countSinceLastEmit = 0;
+							// 给主线程一点喘息机会，防止 UI 卡死
+							await new Promise(r => setTimeout(r, 0));
 						}
 					}
 				}
 			}
 			
 			devLog(`[Tier ${tier}] 后缀查询完成，检查数: ${suffixMatchCount}`);
+			emit(getCategorized()); // 后缀查询完再更新一次
 
 			// 如果内存中查不到，且此时词库还没加载，自动触发一次极速加载
 			if (Object.keys(matchedByWordCount).length === 0 && !window.dictLoaded) {
@@ -964,6 +1002,7 @@ const cdnList = [
 			matchedResultsList.innerHTML = '';
 
 			const tier = getLoosenessTier(looseness);
+			const mySearchId = currentSearchId; // 捕获当前的 SearchId
 			const rhymeInfo = infos.map(i => `${i.char}(${i.fin}${i.tone})`).join(' ');
 			
 			const prompt = `你是一个深谙中文韵律的顶级作词人，现在需要根据一个词寻找押韵的词汇。
@@ -1000,6 +1039,10 @@ const cdnList = [
 				}
 
 				const data = await response.json();
+				
+				// 任务过时检查
+				if (mySearchId !== currentSearchId) return;
+
 				const text = data.candidates[0].content.parts[0].text.trim();
 				// 使用正则提取所有中文字符串，过滤掉非中文和原词
 				const aiWords = (text.match(/[\u4e00-\u9fa5]+/g) || []).filter(w => w && w !== src);
@@ -1052,6 +1095,14 @@ const cdnList = [
 
 		const process = async () => {
 		const goBtn = document.getElementById('go');
+		// 每次启动搜索，增加 ID，立即使之前的异步任务失效
+		const mySearchId = ++currentSearchId;
+
+		// 立即清理任何正在进行的动画，防止新旧结果交替闪烁
+		if (window.stopAllRhymeAnimations) {
+			window.stopAllRhymeAnimations();
+		}
+		
 		try {
 			const src = document.getElementById('source').value.trim();
 			const looseness = Number(document.getElementById('looseness').value);
@@ -1060,7 +1111,7 @@ const cdnList = [
 			// Show loading state
 			goBtn.classList.add('loading');
 		if (!goBtn.querySelector('.btn-text')) {
-			goBtn.innerHTML = '<span class="btn-text">' + goBtn.textContent + '</span>';
+			goBtn.innerHTML = '<span class="btn-text">' + goBtn.textContent + '</span><span class="spinner"></span>';
 		}
 		
 		if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
@@ -1105,12 +1156,43 @@ const cdnList = [
 				return;
 			}
 			
-			// 尝试从字典查询整句
-			const dictResult = await queryDict(tempInfosWithOverrides, looseness);
-			currentDictResult = dictResult; // 保存到全局变量供render使用
-			
 			// 获取用户输入的原词（用于排除）
 			const userInput = tempInfosWithOverrides.map(info => info.char).join('');
+
+			// 在开始新搜索前，清理旧的动画任务，防止新老任务交替闪烁
+			if (window.stopAllRhymeAnimations) {
+				window.stopAllRhymeAnimations();
+			}
+
+			// 增量渲染回调：在查询过程中就先显示一波结果
+			let hasScrolled = false;
+			const handleIncremental = (incResult) => {
+				// 校验 ID，防止过时回调导致闪烁
+				if (mySearchId !== currentSearchId) return;
+
+				// 只要收到了增量更新（哪怕是空的精确匹配结果），就解除按钮转圈状态，让用户知道后台正在查
+				goBtn.classList.remove('loading');
+
+				if (incResult.sameLength.length > 0 || incResult.moreLengths.length > 0) {
+					const firstPhrase = incResult.sameLength[0] || incResult.moreLengths[0] || src;
+					const newInfos = tempInfosWithOverrides.map((info, idx) => {
+						return { ...info, generated: Array.from(firstPhrase)[idx] || info.char, locked: false };
+					});
+					
+					// 仅在第一波结果时触发滚动 (isIncremental = false)
+					// 后续追加的结果不再强制滚动 (isIncremental = true)，避免干扰用户手动查看
+					render(newInfos, firstPhrase, incResult, userInput, true, hasScrolled);
+					hasScrolled = true;
+				}
+			};
+
+			// 尝试从字典查询整句
+			const dictResult = await queryDict(tempInfosWithOverrides, looseness, handleIncremental, mySearchId);
+			
+			// 如果在等待异步查询的过程中，任务已经过时，则不继续执行后续逻辑
+			if (mySearchId !== currentSearchId) return;
+			
+			currentDictResult = dictResult; // 保存到全局变量供render使用
 			
 			if (dictResult) {
 				devLog('字典查询成功');
@@ -1236,7 +1318,8 @@ const cdnList = [
 		}
 		
 		currentInfos = newInfos;
-		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
+		// 最终渲染所有结果 (若是增量模式则不应再触发滚动)
+		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput, false, hasScrolled);
 		
 		} catch (error) {
 			console.error('执行失败:', error);
@@ -1252,6 +1335,7 @@ const cdnList = [
 	const updateSingleChar = async (index, newTone, newFinal) => {
 		if (!Array.isArray(currentInfos) || index < 0 || index >= currentInfos.length) return;
 		
+		const mySearchId = ++currentSearchId; // 同样增加 ID
 		const isAiMode = document.getElementById('aiMode').checked;
 
 		// 克隆当前信息数组
@@ -1284,7 +1368,10 @@ const cdnList = [
 		
 		// 使用更新后的信息重新查询
 		const looseness = Number(document.getElementById('looseness').value);
-		const dictResult = await queryDict(updatedInfos, looseness);
+		const dictResult = await queryDict(updatedInfos, looseness, null, mySearchId);
+		
+		if (mySearchId !== currentSearchId) return;
+
 		currentDictResult = dictResult;
 		
 		// 获取用户输入的原词
@@ -1358,7 +1445,7 @@ const cdnList = [
 		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput);
 	};
 
-	const render = (infos, text, dictResult, userInput, skipFilter = false) => {
+	const render = (infos, text, dictResult, userInput, skipFilter = false, isIncremental = false) => {
 			// 获取平仄过滤选项
 			const pingzeFilter = document.querySelector('input[name="pingze"]:checked')?.value || 'all';
 			const looseness = Number(document.getElementById('looseness').value);
@@ -1402,6 +1489,15 @@ const cdnList = [
 				}
 				
 				// 5. 渲染 HTML (支持颜色标注)
+				
+				// 停止可能存在的旧动画
+				if (window.stopAllRhymeAnimations) window.stopAllRhymeAnimations();
+
+				// 锁定当前高度，防止清空时塌陷
+				if (output.offsetHeight > 0) {
+					output.style.minHeight = output.offsetHeight + 'px';
+				}
+
 				output.innerHTML = '';
 				resultsWithTier.forEach((item, idx) => {
 					const span = document.createElement('span');
@@ -1427,6 +1523,13 @@ const cdnList = [
 						output.appendChild(document.createTextNode('\t'));
 					}
 				});
+
+				// 渲染完成后延迟释放高度限制，平滑过渡
+				// requestAnimationFrame(() => {
+				setTimeout(() => { 
+					output.style.minHeight = ''; 
+				}, 300);
+				// });
 
 				output.style.whiteSpace = 'pre-wrap';
 				output.style.wordBreak = 'keep-all';
@@ -1592,7 +1695,7 @@ const cdnList = [
 			});
 
 			// 触发动画
-			if (window.triggerResultAnimation) window.triggerResultAnimation();
+			if (window.triggerResultAnimation) window.triggerResultAnimation(isIncremental);
 		};
 
 
