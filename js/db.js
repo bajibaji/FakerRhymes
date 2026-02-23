@@ -40,8 +40,11 @@ window.dbManager = {
 	
 	queryExact: (encodedKey) => sendToWorker('queryExact', encodedKey),
 	
-	querySuffix: (suffix2, minLength, pattern) => 
+	querySuffix: (suffix2, minLength, pattern) =>
 		sendToWorker('querySuffix', { suffix2, minLength, pattern }),
+	
+	querySuffixBatch: (queries, globalLimit) =>
+		sendToWorker('querySuffixBatch', { queries, globalLimit }),
 	
 	queryByKeys: (keys) => sendToWorker('queryByKeys', keys),
 	

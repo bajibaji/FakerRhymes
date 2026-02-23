@@ -56,15 +56,31 @@
 
 1.  **分片优势**: 通过拆分 `dict_part_n.json`，显著降低了单次 HTTP 请求的压力。
 2.  **内存权衡**: 为了实现极速检索，我们将全量词库映射为内存 Map。在超大规模词库（>10万词）情况下，需考虑改为分片按需加载。
-3.  **计算波峰**: 在“最松”模式下匹配长词时，CPU 会有短暂的高负载，目前通过 Web Worker 缓解，但仍需监控低端设备的响应。
+3.  **计算波峰**: 在"最松"模式下匹配长词时，CPU 会有短暂的高负载，目前通过 Web Worker 缓解，但仍需监控低端设备的响应。
+
+## 6. 2026-02-22 查询性能优化记录
+
+### 问题诊断
+- **P0**: `queryDict` Phase 2 后缀查询存在 N+1 问题，Tier 2 下对每个变体 key 单独发一次 `postMessage`，最多 200+ 次 Worker 往返
+- **P0**: `encoded_key LIKE '%xxx'` 前缀通配符无法走索引，退化为全行扫描
+- **P1**: 缺少复合索引 `(suffix_2, length)`
+- **P1**: `matchedByWordCount` 去重用 `Array.includes()` 是 O(n)
+- **P2**: `BloomFilter` 类已不再使用，为死代码
+
+### 修改内容
+- [`js/worker-db.js`](js/worker-db.js): 新增 `querySuffixBatch` 函数，将 N 次后缀查询合并为 1 次 SQL（用 `IN` 替代 `LIKE '%xxx'`，可走索引）
+- [`js/worker-db.js`](js/worker-db.js): 新增复合索引 `idx_words_suffix_length ON words(suffix_2, length)`
+- [`js/worker-db.js`](js/worker-db.js): 新增 `ensureIndexes()` 函数，对已有数据库补建缺失索引
+- [`js/db.js`](js/db.js): 新增 `querySuffixBatch` 代理接口
+- [`js/main.js`](js/main.js): Phase 2 改为单次 `querySuffixBatch` 调用，消除 N+1
+- [`js/main.js`](js/main.js): `matchedByWordCount` 值改用 `Set`，去重 O(1)
+- [`js/main.js`](js/main.js): Phase 1 `BATCH_SIZE` 从 100 提升到 500
+- [`js/main.js`](js/main.js): 删除 `BloomFilter` 死代码
+
+### 预期收益
+- Tier 2（最松模式）查询延迟：200+ 次 Worker 往返 → 1 次，预计快 **10-50x**
+- 后缀过滤：`LIKE` 全扫 → `IN` 走索引，预计快 **5-10x**
+- 复合索引：`suffix_2 + length` 双条件过滤，预计快 **2-3x**
 
 ---
-*最后更新日期: 2026年1月31日*
-前通过 Web Worker 缓解，但仍需监控低端设备的响应。
-
----
-*最后更新日期: 2026年1月31日*
-前通过 Web Worker 缓解，但仍需监控低端设备的响应。
-
----
-*最后更新日期: 2026年1月31日*
+*最后更新日期: 2026年2月22日*

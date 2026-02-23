@@ -122,42 +122,6 @@ const devLog = (...args) => {
 			}).join('');
 		}
 
-		// Bloom Filter implementation
-		class BloomFilter {
-			constructor(size = 10000, hashCount = 3) {
-				this.size = size;
-				this.hashCount = hashCount;
-				this.bitArray = new Uint8Array(Math.ceil(size / 8));
-			}
-
-			_hash(string, seed) {
-				let hash = 0;
-				for (let i = 0; i < string.length; i++) {
-					hash = (hash * 31 + string.charCodeAt(i) + seed) % this.size;
-				}
-				return hash;
-			}
-
-			add(string) {
-				for (let i = 0; i < this.hashCount; i++) {
-					const index = this._hash(string, i);
-					this.bitArray[index >> 3] |= (1 << (index & 7));
-				}
-			}
-
-			mightContain(string) {
-				for (let i = 0; i < this.hashCount; i++) {
-					const index = this._hash(string, i);
-					if (!(this.bitArray[index >> 3] & (1 << (index & 7)))) {
-						return false;
-					}
-				}
-				return true;
-			}
-		}
-
-		let bloomFilter = new BloomFilter();
-
 		// 全局词库对象，用于快速内存查询
 		let globalDictData = null;
 
@@ -642,79 +606,68 @@ const devLog = (...args) => {
 			devLog(`[Tier ${tier}] 编码后的查询变体数量: ${queryVariantSet.size}`);
 			
 			// 在字典中搜索所有可能的匹配
-			const matchedByWordCount = {};
+			// 使用 Set 替代 Array 做去重，O(1) 插入/查找
+			const matchedByWordCount = {}; // { len: Set<phrase> }
 			const sourceLength = infos.length;
-			
-			// 优化方案：移动端优先，只使用精准哈希查询
-			let suffixMatchCount = 0;
 			
 			// 批量查询所有变体
 			const variantKeys = Array.from(queryVariantSet);
 			
+			// 辅助：向 matchedByWordCount 插入一条结果
+			const addMatch = (phrase) => {
+				const phraseLen = phrase.length;
+				if (!matchedByWordCount[phraseLen]) matchedByWordCount[phraseLen] = new Set();
+				matchedByWordCount[phraseLen].add(phrase);
+			};
+	
 			// 1. 精确匹配（通过 SQLite IN 查询）- 这部分非常快
-			const BATCH_SIZE = 100;
+			const BATCH_SIZE = 500; // 提升批次大小，减少 Worker 往返次数
 			for (let i = 0; i < variantKeys.length; i += BATCH_SIZE) {
 				const batch = variantKeys.slice(i, i + BATCH_SIZE);
 				const results = await window.dbManager.queryByKeys(batch);
-				
-				for (const row of results) {
-					const phrase = row.phrase;
-					const phraseLen = phrase.length;
-					if (!matchedByWordCount[phraseLen]) matchedByWordCount[phraseLen] = [];
-					if (!matchedByWordCount[phraseLen].includes(phrase)) matchedByWordCount[phraseLen].push(phrase);
-				}
+				for (const row of results) addMatch(row.phrase);
 			}
-
+	
 			// 立即渲染第一批结果（精确匹配）
 			const getCategorized = () => {
 				const res = { sameLength: [], moreLengths: [], lessLength: [] };
 				Object.keys(matchedByWordCount).forEach(len => {
 					const l = Number(len);
-					if (l === sourceLength) res.sameLength.push(...matchedByWordCount[len]);
-					else if (l > sourceLength) res.moreLengths.push(...matchedByWordCount[len]);
-					else if (l === sourceLength - 1) res.lessLength.push(...matchedByWordCount[len]);
+					const arr = Array.from(matchedByWordCount[len]);
+					if (l === sourceLength) res.sameLength.push(...arr);
+					else if (l > sourceLength) res.moreLengths.push(...arr);
+					else if (l === sourceLength - 1) res.lessLength.push(...arr);
 				});
 				return res;
 			};
 			
 			emit(getCategorized());
-
-			// 2. 后缀匹配（模糊查询，较慢）- 开启增量模式
-			// 只有在查询键长度 >= 2 时才进行，因为 LIKE '%x' 这种单字后缀在十几万条数据中太慢了
+	
+			// 2. 后缀匹配（批量，单次 Worker 调用）
+			// 把所有变体 key 的后缀查询合并为一次 querySuffixBatch，消除 N+1 问题
 			if (queryVariantSet.size > 0) {
-				let countSinceLastEmit = 0;
+				// 检查是否被中断
+				if (searchId !== currentSearchId) return null;
+	
+				const batchQueries = [];
 				for (const qk of queryVariantSet) {
-					// 检查是否被中断
-					if (searchId !== currentSearchId) return null;
-
 					if (qk.length >= 2) {
-						const suffix = qk.slice(-2);
-						const results = await window.dbManager.querySuffix(suffix, sourceLength, '%' + qk);
-						suffixMatchCount += results.length;
-						
-						for (const row of results) {
-							const phrase = row.phrase;
-							const phraseLen = phrase.length;
-							if (!matchedByWordCount[phraseLen]) matchedByWordCount[phraseLen] = [];
-							if (!matchedByWordCount[phraseLen].includes(phrase)) {
-								matchedByWordCount[phraseLen].push(phrase);
-								countSinceLastEmit++;
-							}
-						}
-
-						// 每搜出 50 个新词，或者每处理一定数量的 key，就更新一次 UI
-						if (countSinceLastEmit >= 50) {
-							if (!emit(getCategorized())) return null;
-							countSinceLastEmit = 0;
-							// 给主线程一点喘息机会，防止 UI 卡死
-							await new Promise(r => setTimeout(r, 0));
-						}
+						batchQueries.push({
+							suffix2: qk.slice(-2),
+							minLength: sourceLength,
+							encodedKey: qk
+						});
 					}
+				}
+	
+				if (batchQueries.length > 0) {
+					const results = await window.dbManager.querySuffixBatch(batchQueries, 500);
+					for (const row of results) addMatch(row.phrase);
+					devLog(`[Tier ${tier}] 后缀批量查询完成，结果数: ${results.length}`);
 				}
 			}
 			
-			devLog(`[Tier ${tier}] 后缀查询完成，检查数: ${suffixMatchCount}`);
-			emit(getCategorized()); // 后缀查询完再更新一次
+			emit(getCategorized()); // 后缀查询完更新一次
 
 			// 如果内存中查不到，且此时词库还没加载，自动触发一次极速加载
 			if (Object.keys(matchedByWordCount).length === 0 && !window.dictLoaded) {
@@ -754,13 +707,7 @@ const devLog = (...args) => {
 
 									const encodedPhraseKey = encodeKey(phraseKey);
 									if (targetVariantSet.has(encodedPhraseKey)) {
-										const phraseLen = Array.from(phrase).length;
-										if (!matchedByWordCount[phraseLen]) {
-											matchedByWordCount[phraseLen] = [];
-										}
-										if (!matchedByWordCount[phraseLen].includes(phrase)) {
-											matchedByWordCount[phraseLen].push(phrase);
-										}
+										addMatch(phrase);
 									}
 								}
 							}
@@ -781,13 +728,13 @@ const devLog = (...args) => {
 		// 先添加相同字数的匹配
 		const sameLengthCandidates = sortedLengths.filter(len => len === sourceLength);
 		for (const len of sameLengthCandidates) {
-			sameLengthResults.push(...matchedByWordCount[len]);
+			sameLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		
 		// 收集少一字的匹配
 		const targetLess = sourceLength - 1;
 		if (targetLess >= 1 && matchedByWordCount[targetLess]) {
-			lessLengthResults.push(...matchedByWordCount[targetLess]);
+			lessLengthResults.push(...Array.from(matchedByWordCount[targetLess]));
 		}
 		
 		// 如果没有相同字数的匹配，且源字数大于2，尝试降级查询
@@ -845,7 +792,7 @@ const devLog = (...args) => {
 		// 然后添加所有字数更多的匹配
 		const moreLengthCandidates = sortedLengths.filter(len => len > sourceLength);
 		for (const len of moreLengthCandidates) {
-			moreLengthResults.push(...matchedByWordCount[len]);
+			moreLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		console.log(`queryDict结果: sameLength=${sameLengthResults.length}, moreLengths=${moreLengthResults.length}, sourceLength=${sourceLength}`);
 		

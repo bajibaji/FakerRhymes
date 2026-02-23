@@ -170,33 +170,37 @@
 				<button class="modal-close" id="helpCloseBtn">&times;</button>
 			</div>
 						<div class="modal-content">
-				<h3> 基本功能</h3>
-				<ul>
-					<li><strong>加载词库：</strong>使用前请务必点击<strong>「加载词库」</strong>按钮</li>
-					<li><strong>输入文字：</strong>在左侧输入框输入需要押韵的词语</li>
-					<li><strong>生成押韵：</strong>点击<strong>「生成押韵」</strong>按钮，系统会自动分析并生成押韵词汇</li>
-					<li><strong>韵脚宽松度：</strong>调节滑块可以放宽押韵条件，最宽松时可以选择显示平仄</li>
-				</ul>
-				
-				<h3> 高级设置</h3>
-				<ul>
-					<li><strong>AI 押韵模式：</strong>启用后需要自行填入 Gemini API Key</li>
-					<li><strong>支持的模型：</strong>目前 AI 模式暂时只支持 Gemini</li>
-				</ul>
-				
-				<h3> 使用技巧</h3>
-				<ul>
-					<li>建议先从较严格的韵脚开始尝试，再逐步放宽条件</li>
-					<li>可以多尝试不同的输入词语，探索更多押韵可能性</li>
-					<li>AI 模式可以生成更有创意的押韵词汇，但需要联网使用</li>
-				</ul>
-				
-				<h3>ℹ 关于</h3>
-				<p>这是一个简单的中文押韵生成器，旨在帮助创作者寻找灵感。</p>
-				<p style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center;">
-					爷不肉，蛋卷制造 2026
-				</p>
-			</div>
+						<h3>📚 基本功能</h3>
+						<ul>
+							<li><strong>加载词库：</strong>首次使用会自动<strong>加载词库</strong>，加载完成后自动保存到本地，下次无需重新加载</li>
+							<li><strong>输入文字：</strong>在输入框中输入需要押韵的词语</li>
+							<li><strong>生成押韵：</strong>点击<strong>「生成押韵」</strong>按钮，系统自动分析韵脚并返回匹配词汇</li>
+							<li><strong>韵脚宽松度：</strong>点击「严格 / 中等 / 最松」切换匹配精度；选「最松」后可额外按平仄（平声 1/2 调 vs 仄声 3/4 调）筛选结果</li>
+							<li><strong>音调选择：</strong>生成后可在「音调选择」表格中手动调整每个字的韵母，重新匹配</li>
+						</ul>
+			
+						<h3>⚙️ 高级功能</h3>
+						<ul>
+							<li><strong>AI 押韵模式：</strong>勾选后可借助 AI 生成更有创意的押韵，需在右侧设置中填入 Gemini API Key</li>
+							<li><strong>自定义词库：</strong>点击右上角<strong>「自定义词库」</strong>按钮，可添加自己的词语，会优先出现在结果中</li>
+							<li><strong>清理缓存：</strong>点击底部「清理缓存」可删除本地词库，下次需重新加载</li>
+						</ul>
+			
+						<h3>💡 使用技巧</h3>
+						<ul>
+							<li>建议先用「严格」模式，找不到满意结果再切换到「中等」或「最松」</li>
+							<li>输入词语的最后两个字决定韵脚，可以尝试不同的词尾</li>
+							<li>「更多匹配结果」区域常有意想不到的长词，适合填词、说唱创作</li>
+							<li>结果显示乱码说明没有匹配，放宽宽松度即可</li>
+						</ul>
+			
+						<h3>ℹ️ 关于</h3>
+						<p>废壳韵脚生成器 —— 帮助创作者快速寻找中文押韵灵感。</p>
+						<p>词库基于雾凇拼音、中华新华字典及清华大学开放中文词库，查询算法基于 pinyin-pro。</p>
+						<p style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center;">
+							爷不肉，蛋卷制造 2026
+						</p>
+					</div>
 		</div>
 	</div>
 

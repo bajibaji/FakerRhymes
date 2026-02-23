@@ -23,6 +23,7 @@ async function initDB() {
 		
 		if (savedData) {
 			db = new SQL.Database(new Uint8Array(savedData));
+			ensureIndexes(); // 对已有数据库补建缺失索引
 			console.log('[Worker] Database loaded from IndexedDB');
 		} else {
 			db = new SQL.Database();
@@ -52,12 +53,22 @@ function createTables() {
 		CREATE INDEX IF NOT EXISTS idx_words_encoded_key ON words(encoded_key);
 		CREATE INDEX IF NOT EXISTS idx_words_suffix_2 ON words(suffix_2);
 		CREATE INDEX IF NOT EXISTS idx_words_length ON words(length);
+		CREATE INDEX IF NOT EXISTS idx_words_suffix_length ON words(suffix_2, length);
 		
 		CREATE TABLE IF NOT EXISTS meta (
 			key TEXT PRIMARY KEY,
 			value TEXT
 		);
 	`);
+}
+
+// 检查并升级索引（对已有数据库补建缺失的复合索引）
+function ensureIndexes() {
+	try {
+		db.run(`CREATE INDEX IF NOT EXISTS idx_words_suffix_length ON words(suffix_2, length)`);
+	} catch(e) {
+		console.warn('[Worker] ensureIndexes failed:', e);
+	}
 }
 
 // 分块插入数据
@@ -91,7 +102,7 @@ function queryExact(encodedKey) {
 	return results;
 }
 
-// 查询后缀匹配
+// 查询后缀匹配（单个，保留兼容）
 function querySuffix(suffix2, minLength, pattern) {
 	if (!db) return [];
 	let sql = `SELECT phrase, encoded_key FROM words WHERE suffix_2 = ? AND length > ? `;
@@ -106,6 +117,38 @@ function querySuffix(suffix2, minLength, pattern) {
 	const results = [];
 	while (stmt.step()) results.push(stmt.getAsObject());
 	stmt.free();
+	return results;
+}
+
+// 批量后缀匹配：把 N 次 querySuffix 合并为 1 次 SQL 查询
+// payload: { queries: [{suffix2, minLength, encodedKey}], globalLimit }
+// 保留 LIKE '%xxx' 语义（后缀匹配），用 OR 批量合并，减少 Worker 往返次数
+function querySuffixBatch(queries, globalLimit = 500) {
+	if (!db || !queries || queries.length === 0) return [];
+
+	// 按 (suffix2, minLength) 分组，同组的 LIKE 条件用 OR 合并
+	const groups = new Map();
+	for (const q of queries) {
+		const groupKey = `${q.suffix2}||${q.minLength}`;
+		if (!groups.has(groupKey)) {
+			groups.set(groupKey, { suffix2: q.suffix2, minLength: q.minLength, keys: new Set() });
+		}
+		groups.get(groupKey).keys.add(q.encodedKey);
+	}
+
+	const results = [];
+	for (const group of groups.values()) {
+		const { suffix2, minLength, keys } = group;
+		const keyArr = Array.from(keys);
+		// 用 OR 合并多个 LIKE '%xxx' 条件，保留后缀匹配语义（找更长的词）
+		const likeConditions = keyArr.map(() => `encoded_key LIKE ?`).join(' OR ');
+		const sql = `SELECT phrase, encoded_key FROM words WHERE suffix_2 = ? AND length > ? AND (${likeConditions}) ORDER BY length ASC LIMIT ${globalLimit}`;
+		const params = [suffix2, minLength, ...keyArr.map(k => '%' + k)];
+		const stmt = db.prepare(sql);
+		stmt.bind(params);
+		while (stmt.step()) results.push(stmt.getAsObject());
+		stmt.free();
+	}
 	return results;
 }
 
@@ -195,6 +238,7 @@ self.onmessage = async function(e) {
 			case 'insertChunk': result = insertChunk(payload); break;
 			case 'queryExact': result = queryExact(payload); break;
 			case 'querySuffix': result = querySuffix(payload.suffix2, payload.minLength, payload.pattern); break;
+			case 'querySuffixBatch': result = querySuffixBatch(payload.queries, payload.globalLimit); break;
 			case 'queryByKeys': result = queryByKeys(payload); break;
 			case 'checkDataExists': result = checkDataExists(); break;
 			case 'save': result = await saveToIndexedDB(); break;
