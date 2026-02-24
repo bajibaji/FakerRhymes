@@ -37,6 +37,7 @@ const devLog = (...args) => {
 		let suffixIndex = new Map(); // 新增：后缀索引，用于支持更长词匹配
 		let locks = [];
 		let currentSearchId = 0; // 搜索任务 ID，用于中断旧任务
+		let isAiLoading = false; // AI 请求锁，防止并发请求触发 429
 
 		// IndexedDB helpers
 		const DB_NAME = 'FakerRhymesDB';
@@ -933,12 +934,14 @@ const devLog = (...args) => {
 		};
 
 		const processAI = async (src, infos, looseness) => {
+			if (isAiLoading) return; // 防止并发请求
 			const apiKey = localStorage.getItem('GEMINI_API_KEY');
 			const proxy = localStorage.getItem('GEMINI_PROXY') || '';
 			if (!apiKey) {
 				alert('请先输入 Gemini API Key');
 				return;
 			}
+			isAiLoading = true;
 
 			const output = document.getElementById('output');
 			const badges = document.getElementById('badges');
@@ -972,7 +975,7 @@ const devLog = (...args) => {
 					baseUrl = proxy.replace(/\/$/, '');
 				}
 
-				const response = await fetch(`${baseUrl}/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+				const response = await fetch(`${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
@@ -1024,21 +1027,22 @@ const devLog = (...args) => {
 				render(newInfos, firstAiWord, dictResult, src, true);
 
 			} catch (e) {
-				console.error('AI 生成失败:', e);
-				let errorMsg = e.message;
-				if (errorMsg === 'Failed to fetch') {
-					errorMsg = '网络连接失败 (Failed to fetch)。如果你在特殊网络环境下，请尝试在设置中配置 API 代理地址。';
+					console.error('AI 生成失败:', e);
+					let errorMsg = e.message;
+					if (errorMsg === 'Failed to fetch') {
+						errorMsg = '网络连接失败 (Failed to fetch)。如果你在特殊网络环境下，请尝试在设置中配置 API 代理地址。';
+					}
+					output.textContent = '❌ AI 生成失败: ' + errorMsg;
+					badges.innerHTML = '';
+				} finally {
+					isAiLoading = false; // 释放请求锁
+					// Remove loading state
+					const goBtn = document.getElementById('go');
+					setTimeout(() => {
+						goBtn.classList.remove('loading');
+					}, 100);
 				}
-				output.textContent = '❌ AI 生成失败: ' + errorMsg;
-				badges.innerHTML = '';
-			} finally {
-				// Remove loading state
-				const goBtn = document.getElementById('go');
-				setTimeout(() => {
-					goBtn.classList.remove('loading');
-				}, 100);
-			}
-		};
+			};
 
 		const process = async () => {
 		const goBtn = document.getElementById('go');
@@ -1690,9 +1694,9 @@ const devLog = (...args) => {
 					const val = btn.dataset.value;
 					loosenInput.value = val;
 					
-					// 触发更新
+					// 触发更新（使用防抖，避免 AI 模式下快速切换触发多次 API 请求）
 					updatePingzeFilterVisibility();
-					triggerRecalc();
+					debouncedRecalc();
 				});
 			});
 			
