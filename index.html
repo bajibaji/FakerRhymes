@@ -38,7 +38,16 @@
 					<label for="source">请输入要押韵的词语：</label>
 					<a class="btn ghost small" href="custom.html"><i class="ri-file-list-3-line"></i>自定义词库</a>
 				</div>
-				<textarea id="source" placeholder="示例：废壳" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="search" spellcheck="false"></textarea>
+				<div class="input-history-layout">
+					<textarea id="source" placeholder="示例：废壳" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="search" spellcheck="false"></textarea>
+					<aside class="history-side">
+						<div class="history-head">
+							<div class="history-title">最近查询</div>
+							<button class="history-clear" type="button" id="clearHistoryBtn">清空</button>
+						</div>
+						<div class="history-list" id="historyList"></div>
+					</aside>
+				</div>
 
 				<div class="controls" style="display: flex; flex-direction: column; gap: 1px; margin-top: 12px;">
 					<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
@@ -87,14 +96,24 @@
 				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
 				<div class="hint">- 越宽松需要查询的时间越长，请耐心等待</div>
+				<div class="hint dict-load-status" id="dictLoadStatus" aria-live="polite"></div>
 				
 				
 			</section>
 
 			<section class="panel" id="resultsPanel">
 				<div style="font-weight: 600; margin-bottom: 14px;">生成结果</div>
+				<div id="queryStatus" class="query-status" style="display: none;" aria-live="polite"></div>
 				<div class="output" id="output"></div>
 				<div class="badge-row" id="badges"></div>
+				<div id="noResultActions" class="no-result-actions" style="display: none;">
+					<div class="small" style="margin-bottom: 8px;">没有找到理想结果，试试一键放宽：</div>
+					<div class="no-result-btn-row">
+						<button class="btn ghost small" type="button" data-action="to-medium">放宽到中等</button>
+						<button class="btn ghost small" type="button" data-action="to-loose">放宽到最松</button>
+						<button class="btn ghost small" type="button" data-action="tail-only">仅尾字匹配</button>
+					</div>
+				</div>
 			</section>
 
 		</main>
@@ -152,11 +171,19 @@
 					<input type="text" id="geminiProxy" placeholder="例如: https://proxy.com" style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
 					<div class="hint">解决 Failed to fetch 错误。</div>
 				</div>
+				<div class="settings-item">
+					<button class="btn ghost" style="width: 100%;" id="testAiSettings">测试连接</button>
+					<div class="hint" id="aiTestStatus" aria-live="polite"></div>
+				</div>
 				<div style="margin-top: 10px;">
 					<button class="btn" style="width: 100%;" id="saveAiSettings">保存设置</button>
 				</div>
 			</div>
 		</div>
+	</div>
+
+	<div class="mobile-go-bar" id="mobileGoBar">
+		<button class="btn" id="goSticky">生成押韵</button>
 	</div>
 
 	<!-- Help Button -->

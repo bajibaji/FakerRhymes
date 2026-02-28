@@ -38,6 +38,97 @@ const devLog = (...args) => {
 		let locks = [];
 		let currentSearchId = 0; // 搜索任务 ID，用于中断旧任务
 		let isAiLoading = false; // AI 请求锁，防止并发请求触发 429
+		let slowQueryTimer = null;
+
+		const HISTORY_KEY = 'FakerRhymes_History';
+		const MAX_HISTORY = 5;
+
+		const setDictLoadStatus = (msg, type = 'info') => {
+			const el = document.getElementById('dictLoadStatus');
+			if (!el) return;
+			el.textContent = msg || '';
+			el.dataset.type = type;
+		};
+
+		const setQueryStatus = (msg = '') => {
+			const el = document.getElementById('queryStatus');
+			if (!el) return;
+			if (!msg) {
+				el.style.display = 'none';
+				el.textContent = '';
+				return;
+			}
+			el.style.display = 'block';
+			el.textContent = msg;
+		};
+
+		const clearSlowQueryFeedback = () => {
+			if (slowQueryTimer) {
+				clearTimeout(slowQueryTimer);
+				slowQueryTimer = null;
+			}
+			setQueryStatus('');
+		};
+
+		const scheduleSlowQueryFeedback = (searchId) => {
+			clearSlowQueryFeedback();
+			slowQueryTimer = setTimeout(() => {
+				if (searchId === currentSearchId) {
+					setQueryStatus('正在扩展匹配范围，请稍候...');
+				}
+			}, 300);
+		};
+
+		const readList = (key) => {
+			try {
+				const raw = localStorage.getItem(key);
+				const list = raw ? JSON.parse(raw) : [];
+				return Array.isArray(list) ? list : [];
+			} catch (e) {
+				console.warn('读取列表失败:', key, e);
+				return [];
+			}
+		};
+
+		const writeList = (key, list) => {
+			try {
+				localStorage.setItem(key, JSON.stringify(list));
+			} catch (e) {
+				console.warn('写入列表失败:', key, e);
+			}
+		};
+
+		const addToHistory = (phrase) => {
+			const normalized = String(phrase || '').trim();
+			if (!normalized) return;
+			const list = readList(HISTORY_KEY).filter(item => item !== normalized);
+			list.unshift(normalized);
+			writeList(HISTORY_KEY, list.slice(0, MAX_HISTORY));
+		};
+
+		const getAiErrorHint = (rawMessage) => {
+			const msg = String(rawMessage || '');
+			const lower = msg.toLowerCase();
+			if (!msg) return '请检查 API Key 或代理设置，然后重试。';
+			if (lower.includes('failed to fetch') || lower.includes('networkerror')) {
+				return '网络连接失败，请检查代理地址或本地网络连接。';
+			}
+			if (lower.includes('api key not valid') || lower.includes('permission denied')) {
+				return 'API Key 无效或无权限，请在 AI 设置中重新填写。';
+			}
+			if (lower.includes('quota') || lower.includes('429') || lower.includes('resource_exhausted')) {
+				return '请求频率或额度已达上限，请稍后再试。';
+			}
+			if (lower.includes('403')) {
+				return '请求被拒绝，请确认 Key 权限和请求来源。';
+			}
+			if (lower.includes('deadline') || lower.includes('timeout')) {
+				return '请求超时，请稍后重试或更换代理。';
+			}
+			return '请检查 AI 设置后重试。';
+		};
+
+		const hasChineseChars = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
 
 		// IndexedDB helpers
 		const DB_NAME = 'FakerRhymesDB';
@@ -130,6 +221,7 @@ const devLog = (...args) => {
 		const loadDict = async () => {
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
+			setDictLoadStatus('正在准备词库...');
 
 			const btn = document.getElementById('loadDictBtn');
 			const originalBtnText = btn ? btn.innerHTML : '📚 加载词库';
@@ -147,6 +239,10 @@ const devLog = (...args) => {
 						devLog('SQLite 数据库已准备就绪，跳过 JSON 加载');
 						window.dictLoaded = true;
 						window.isDictLoading = false;
+						localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
+						localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
+						localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
+						setDictLoadStatus('词库已就绪，可离线使用。', 'success');
 						
 						if (btn) {
 							btn.innerHTML = `✅ 词库已就绪 (SQLite)`;
@@ -233,6 +329,7 @@ const devLog = (...args) => {
 						const currentLoaded = progressMap.reduce((acc, val) => acc + val, 0);
 						const percent = Math.min(99, Math.round((currentLoaded / totalSize) * 100));
 						if (btn) btn.innerHTML = `<i class="ri-loader-4-line"></i> 载入中 ${percent}%`;
+						setDictLoadStatus(`下载词库中 ${percent}%`);
 					}
 					
 					const blob = new Blob(chunks);
@@ -248,6 +345,7 @@ const devLog = (...args) => {
 				]);
 				
 				if (btn) btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
+				setDictLoadStatus('词库下载完成，正在解析...');
 
 				// 初始化 SQLite 数据库
 				const db = await window.dbManager.init();
@@ -289,7 +387,9 @@ const devLog = (...args) => {
 								batchData = [];
 								
 								// 每次 chunk 插入后都更新 UI 并让出主线程，不再跳过
-								if (btn) btn.innerHTML = `<i class="ri-database-2-line"></i> 导入中 ${(i * 33 + (j / keys.length) * 33).toFixed(0)}%...`;
+								const importPercent = (i * 33 + (j / keys.length) * 33).toFixed(0);
+								if (btn) btn.innerHTML = `<i class="ri-database-2-line"></i> 导入中 ${importPercent}%...`;
+								setDictLoadStatus(`写入本地数据库中 ${importPercent}%`);
 								
 								// 增加延时 (0ms -> 5ms)，确保浏览器有足够时间渲染帧
 								await new Promise(resolve => setTimeout(resolve, 5));
@@ -308,6 +408,7 @@ const devLog = (...args) => {
 					
 					// 显式保存到 IndexedDB
 					if (btn) btn.innerHTML = '<i class="ri-save-3-line"></i> 正在写入硬盘...';
+					setDictLoadStatus('正在写入浏览器本地存储...');
 					await new Promise(resolve => setTimeout(resolve, 50)); 
 					
 					// 强制在下一次事件循环中执行 save，防止卡死当前渲染帧
@@ -325,6 +426,10 @@ const devLog = (...args) => {
 				
 				window.dictLoaded = true;
 				window.isDictLoading = false;
+				localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
+				localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
+				localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
+				setDictLoadStatus('词库加载完成，后续可离线使用。', 'success');
 				devLog('词库就绪耗时:', (performance.now() - startTime).toFixed(2), 'ms');
 				
 				// 更新 UI
@@ -342,6 +447,7 @@ const devLog = (...args) => {
 			} catch (e) {
 				console.error('极速载入失败:', e);
 				window.isDictLoading = false;
+				setDictLoadStatus(`词库加载失败：${e.message || '请重试'}`, 'error');
 				
 				if (btn) {
 					btn.innerHTML = '❌ 加载失败 (点击重试)';
@@ -438,6 +544,73 @@ const devLog = (...args) => {
 			const tone = extractTone(raw);
 			const parts = detectFinal(clean);
 			return parts ? { char, raw, clean, tone, fin: parts.final, ini: parts.initial } : null;
+		};
+
+		const getPolyphonicCandidates = (char) => {
+			if (!window.pinyinPro || !window.pinyinPro.pinyin) return [];
+
+			const values = new Set();
+			const pushText = (val) => {
+				if (typeof val !== 'string') return;
+				val
+					.split(/[,\s/|]+/)
+					.map(item => item.trim())
+					.filter(Boolean)
+					.forEach(item => values.add(item));
+			};
+
+			const collect = (input) => {
+				if (!input) return;
+				if (Array.isArray(input)) {
+					input.flat(Infinity).forEach(collect);
+					return;
+				}
+				pushText(input);
+			};
+
+			try {
+				collect(window.pinyinPro.pinyin(char, {
+					type: 'array',
+					toneType: 'num',
+					pattern: 'pinyin',
+					multiple: true
+				}));
+			} catch (e) {}
+
+			try {
+				collect(window.pinyinPro.pinyin(char, {
+					toneType: 'num',
+					pattern: 'pinyin',
+					multiple: true
+				}));
+			} catch (e) {}
+
+			const fallback = toInfo(char);
+			if (fallback && fallback.raw) values.add(fallback.raw);
+
+			const candidates = [];
+			values.forEach(raw => {
+				const clean = normalize(raw);
+				const tone = extractTone(raw);
+				const parts = detectFinal(clean);
+				if (!parts || !tone) return;
+				candidates.push({
+					raw,
+					tone,
+					fin: parts.final,
+					ini: parts.initial
+				});
+			});
+
+			const dedup = [];
+			const seen = new Set();
+			for (const item of candidates) {
+				const key = `${item.raw}-${item.tone}-${item.fin}`;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				dedup.push(item);
+			}
+			return dedup;
 		};
 
 		const registerBank = () => {
@@ -933,6 +1106,34 @@ const devLog = (...args) => {
 			return candidates[Math.floor(Math.random() * candidates.length)];
 		};
 
+		const getGeminiBaseUrl = (proxy) => {
+			if (!proxy) return 'https://generativelanguage.googleapis.com';
+			return proxy.replace(/\/$/, '');
+		};
+
+		const requestGemini = async (prompt, apiKey, proxy) => {
+			const baseUrl = getGeminiBaseUrl(proxy);
+			const response = await fetch(`${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					contents: [{ parts: [{ text: prompt }] }]
+				})
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => ({}));
+				throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+			}
+
+			const data = await response.json();
+			const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+			if (!text) {
+				throw new Error('AI 未返回有效内容');
+			}
+			return text;
+		};
+
 		const processAI = async (src, infos, looseness) => {
 			if (isAiLoading) return; // 防止并发请求
 			const apiKey = localStorage.getItem('GEMINI_API_KEY');
@@ -957,45 +1158,30 @@ const devLog = (...args) => {
 			
 			const prompt = `你是一个深谙中文韵律的顶级作词人，现在需要根据一个词寻找押韵的词汇。
 
-					【输入词】：${src}
-					【韵部】：${rhymeInfo}
-					【等级】：Tier ${tier}（0为死押、音调和韵脚要一致，1为通押、优先音调一致，2为谐音、音调可以不一致）
+【输入词】：${src}
+【韵部】：${rhymeInfo}
+【等级】：Tier ${tier}（0为死押、音调和韵脚要一致，1为通押、优先音调一致，2为谐音、音调可以不一致）
 
-						任务：
-						1. 生成至少 25 个与输入词语押韵的中文词语。
-						2. 生成的词语不能和输入词语相同。生成的词语要包含不限于常用词语、网络词语、成语、歌词等，但优先显示生成的歌词和常见词语。
-						3. 生成字数相同的词语25个,但也要生成15个包含字数更多尾部押韵的词语。生成更多字数的押韵词语要尽量多样化，尾部不可以重复。
-						4. 必须严格遵守韵脚和音调要求（除非等级Tier较高，音调为1,2,3,4）。
-						5. 只返回词语列表，用空格分隔，不要有任何解释。
-						6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
+任务：
+1. 生成至少 25 个与输入词语押韵的中文词语。
+2. 生成的词语不能和输入词语相同。生成的词语要包含不限于常用词语、网络词语、成语、歌词等，但优先显示生成的歌词和常见词语。
+3. 生成字数相同的词语25个,但也要生成15个包含字数更多尾部押韵的词语。生成更多字数的押韵词语要尽量多样化，尾部不可以重复。
+4. 必须严格遵守韵脚和音调要求（除非等级Tier较高，音调为1,2,3,4）。
+5. 只返回词语列表，用空格分隔，不要有任何解释。
+6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
 
 			try {
-				let baseUrl = 'https://generativelanguage.googleapis.com';
-				if (proxy) {
-					baseUrl = proxy.replace(/\/$/, '');
-				}
-
-				const response = await fetch(`${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						contents: [{ parts: [{ text: prompt }] }]
-					})
-				});
-
-				if (!response.ok) {
-					const errorData = await response.json().catch(() => ({}));
-					throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-				}
-
-				const data = await response.json();
+				const text = await requestGemini(prompt, apiKey, proxy);
 				
 				// 任务过时检查
 				if (mySearchId !== currentSearchId) return;
 
-				const text = data.candidates[0].content.parts[0].text.trim();
-				// 使用正则提取所有中文字符串，过滤掉非中文和原词
-				const aiWords = (text.match(/[\u4e00-\u9fa5]+/g) || []).filter(w => w && w !== src);
+				// 只提取中文词条
+				const rawWords = text.match(/[\u4e00-\u9fa5]+/g) || [];
+				const aiWords = rawWords
+					.map(w => w.trim())
+					.filter(Boolean)
+					.filter(w => w !== src);
 
 				if (aiWords.length === 0) {
 					throw new Error('AI 未返回有效的押韵词，请重试。');
@@ -1026,28 +1212,73 @@ const devLog = (...args) => {
 				currentDictResult = dictResult;
 				render(newInfos, firstAiWord, dictResult, src, true);
 
-			} catch (e) {
+				} catch (e) {
 					console.error('AI 生成失败:', e);
-					let errorMsg = e.message;
-					if (errorMsg === 'Failed to fetch') {
-						errorMsg = '网络连接失败 (Failed to fetch)。如果你在特殊网络环境下，请尝试在设置中配置 API 代理地址。';
-					}
-					output.textContent = '❌ AI 生成失败: ' + errorMsg;
+					const errorMsg = e.message || '未知错误';
+					const hint = getAiErrorHint(errorMsg);
+					output.textContent = `❌ AI 生成失败：${errorMsg}。${hint}`;
 					badges.innerHTML = '';
 				} finally {
 					isAiLoading = false; // 释放请求锁
-					// Remove loading state
-					const goBtn = document.getElementById('go');
+					clearSlowQueryFeedback();
 					setTimeout(() => {
-						goBtn.classList.remove('loading');
+						setGenerateButtonsLoading(false);
 					}, 100);
 				}
 			};
 
+		const testAiConnection = async () => {
+			const statusEl = document.getElementById('aiTestStatus');
+			const testBtn = document.getElementById('testAiSettings');
+			const apiKey = document.getElementById('geminiApiKey')?.value.trim();
+			const proxy = document.getElementById('geminiProxy')?.value.trim() || '';
+			if (!statusEl || !testBtn) return;
+
+			if (!apiKey) {
+				statusEl.textContent = '请先填写 Gemini API Key。';
+				statusEl.dataset.type = 'error';
+				return;
+			}
+
+			statusEl.textContent = '正在测试连接...';
+			statusEl.dataset.type = 'info';
+			testBtn.disabled = true;
+			try {
+				await requestGemini('请回复“连接成功”四个字。', apiKey, proxy);
+				statusEl.textContent = '连接成功，API 可用。';
+				statusEl.dataset.type = 'success';
+			} catch (e) {
+				const errorMsg = e.message || '未知错误';
+				statusEl.textContent = `连接失败：${getAiErrorHint(errorMsg)} (${errorMsg})`;
+				statusEl.dataset.type = 'error';
+			} finally {
+				testBtn.disabled = false;
+			}
+		};
+
+		const setGenerateButtonsLoading = (loading) => {
+			const buttons = [
+				document.getElementById('go'),
+				document.getElementById('goSticky')
+			].filter(Boolean);
+
+			buttons.forEach(btn => {
+				if (loading) {
+					btn.classList.add('loading');
+					if (!btn.querySelector('.btn-text')) {
+						btn.innerHTML = `<span class="btn-text">${btn.textContent}</span><span class="spinner"></span>`;
+					}
+				} else {
+					btn.classList.remove('loading');
+				}
+			});
+		};
+
 		const process = async () => {
-		const goBtn = document.getElementById('go');
 		// 每次启动搜索，增加 ID，立即使之前的异步任务失效
 		const mySearchId = ++currentSearchId;
+		scheduleSlowQueryFeedback(mySearchId);
+		let delegatedToAi = false;
 
 		// 立即清理任何正在进行的动画，防止新旧结果交替闪烁
 		if (window.stopAllRhymeAnimations) {
@@ -1060,29 +1291,39 @@ const devLog = (...args) => {
 			const isAiMode = document.getElementById('aiMode').checked;
 			
 			// Show loading state
-			goBtn.classList.add('loading');
-		if (!goBtn.querySelector('.btn-text')) {
-			goBtn.innerHTML = '<span class="btn-text">' + goBtn.textContent + '</span><span class="spinner"></span>';
-		}
+			setGenerateButtonsLoading(true);
 		
 		if (!pinyinReady || !window.pinyinPro || !window.pinyinPro.pinyin) {
-			goBtn.classList.remove('loading');
+			setGenerateButtonsLoading(false);
+			clearSlowQueryFeedback();
 			render([], 'pinyin-pro 未加载，请检查网络或稍后重试', null, '');
 			return;
 		}
 		if (bankMap.size === 0) bankMap = registerBank();
 		if (!src) {
-			goBtn.classList.remove('loading');
+			setGenerateButtonsLoading(false);
+			clearSlowQueryFeedback();
 			render([], '等待输入...', null, '');
 			return;
 		}
 
 		// 新增：限制单字查询，防止性能问题和无意义结果
 		if (Array.from(src).length < 2) {
-			goBtn.classList.remove('loading');
-			render([], '⚠️ 请输入至少两个字以获得更精准的押韵结果。', null, '');
+			setGenerateButtonsLoading(false);
+			clearSlowQueryFeedback();
+			render([], '⚠️ 请输入至少两个字符以获得更精准的押韵结果。', null, '');
 			return;
 		}
+
+		// 仅支持中文输入（本项目为中文韵脚查询）
+		if (!hasChineseChars(src)) {
+			setGenerateButtonsLoading(false);
+			clearSlowQueryFeedback();
+			render([], '⚠️ 仅支持中文词语查询，请输入中文。', null, '');
+			return;
+		}
+		addToHistory(src);
+		renderQuickLists();
 
 		// Build new infos but preserve locked/forced settings from previous run
 			const oldInfos = Array.isArray(currentInfos) ? currentInfos.slice() : [];
@@ -1090,19 +1331,26 @@ const devLog = (...args) => {
 			// 先提取所有字符的拼音信息，记录基准声调
 			const tempInfos = Array.from(src).map((ch) => {
 				const info = toInfo(ch);
-				if (!info) return { char: ch, raw: '-', tone: '-', baseTone: '-', fin: '-', forcedTone: null };
-				return { ...info, baseTone: info.tone, forcedTone: null };
+				if (!info) return { char: ch, raw: '-', tone: '-', baseTone: '-', fin: '-', forcedTone: null, forcedFinal: null, forcedRaw: null };
+				return { ...info, baseTone: info.tone, forcedTone: null, forcedFinal: null, forcedRaw: null };
 			});
 
-			// 应用用户在解析表中选择的强制声调
+			// 应用用户在解析表中选择的强制声调 / 强制韵母 / 强制读音
 			const tempInfosWithOverrides = tempInfos.map((info, idx) => {
 				const old = oldInfos[idx];
 				const forcedTone = old && old.forcedTone !== null ? old.forcedTone : null;
+				const forcedFinal = old && old.forcedFinal !== undefined ? old.forcedFinal : null;
+				const forcedRaw = old && old.forcedRaw !== undefined ? old.forcedRaw : null;
 				const tone = forcedTone !== null ? forcedTone : info.baseTone;
-				return { ...info, tone, forcedTone };
+				const fin = forcedFinal !== null ? forcedFinal : info.fin;
+				const raw = forcedRaw !== null ? forcedRaw : info.raw;
+				return { ...info, tone, fin, raw, forcedTone, forcedFinal, forcedRaw };
 			});
 
 			if (isAiMode) {
+				delegatedToAi = true;
+				clearSlowQueryFeedback();
+				setQueryStatus('AI 正在生成押韵建议...');
 				processAI(src, tempInfosWithOverrides, looseness);
 				return;
 			}
@@ -1122,7 +1370,8 @@ const devLog = (...args) => {
 				if (mySearchId !== currentSearchId) return;
 
 				// 只要收到了增量更新（哪怕是空的精确匹配结果），就解除按钮转圈状态，让用户知道后台正在查
-				goBtn.classList.remove('loading');
+				setGenerateButtonsLoading(false);
+				setQueryStatus('已找到部分结果，正在补充更多匹配...');
 
 				if (incResult.sameLength.length > 0 || incResult.moreLengths.length > 0) {
 					const firstPhrase = incResult.sameLength[0] || incResult.moreLengths[0] || src;
@@ -1166,8 +1415,16 @@ const devLog = (...args) => {
 				if (ranked.length === 0) {
 					// 字典查询没有通过过滤的结果，退回到逐字选择的模式
 					newInfos = tempInfosWithOverrides.map((info, idx) => {
+						const oldState = oldInfos[idx] || {};
 						if (info.fin === '-') {
-							return { ...info, generated: info.char, locked: false, forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null };
+							return {
+								...info,
+								generated: info.char,
+								locked: false,
+								forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+								forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+								forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
+							};
 						}
 						// 保留锁定状态
 						if (oldInfos[idx] && oldInfos[idx].locked) {
@@ -1175,7 +1432,9 @@ const devLog = (...args) => {
 								...info, 
 								generated: oldInfos[idx].generated || info.char, 
 								locked: true, 
-								forcedTone: oldInfos[idx].forcedTone || null 
+								forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+								forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+								forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
 							};
 						}
 						const candidate = pickFromMap(info.fin, info.tone, looseness);
@@ -1183,13 +1442,16 @@ const devLog = (...args) => {
 							...info, 
 							generated: candidate || info.char, 
 							locked: false, 
-							forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
+							forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+							forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+							forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
 						};
 					});
 				} else {
 					const firstPhrase = Array.from(ranked[0]); // 第一条作为默认生成
 					
 					newInfos = tempInfosWithOverrides.map((info, idx) => {
+						const oldState = oldInfos[idx] || {};
 						// 保留锁定状态
 						if (oldInfos[idx] && oldInfos[idx].locked) {
 							return { 
@@ -1197,7 +1459,9 @@ const devLog = (...args) => {
 								generated: oldInfos[idx].generated || info.char, 
 								candidates: [], // 锁定状态下不显示候选项
 								locked: true, 
-								forcedTone: oldInfos[idx].forcedTone || null 
+								forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+								forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+								forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
 							};
 						}
 						
@@ -1239,15 +1503,25 @@ const devLog = (...args) => {
 						generated: selectedChar, 
 						candidates: filteredCandidates.length > 0 ? filteredCandidates : charCandidates,
 						locked: false, 
-						forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
+						forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+						forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+						forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
 					};
 				});
 			}
 		} else {
 			// 字典查询失败,使用原逻辑
 			newInfos = tempInfosWithOverrides.map((info, idx) => {
+				const oldState = oldInfos[idx] || {};
 				if (info.fin === '-') {
-					return { ...info, generated: info.char, locked: false, forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null };
+					return {
+						...info,
+						generated: info.char,
+						locked: false,
+						forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+						forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+						forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
+					};
 				}
 				// 保留锁定状态
 				if (oldInfos[idx] && oldInfos[idx].locked) {
@@ -1255,7 +1529,9 @@ const devLog = (...args) => {
 						...info, 
 						generated: oldInfos[idx].generated || info.char, 
 						locked: true, 
-						forcedTone: oldInfos[idx].forcedTone || null 
+						forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+						forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+						forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
 					};
 				}
 				const candidate = pickFromMap(info.fin, info.tone, looseness);
@@ -1263,27 +1539,33 @@ const devLog = (...args) => {
 					...info, 
 					generated: candidate || info.char, 
 					locked: false, 
-					forcedTone: oldInfos[idx] && oldInfos[idx].forcedTone !== undefined ? oldInfos[idx].forcedTone : null 
+					forcedTone: oldState.forcedTone !== undefined ? oldState.forcedTone : null,
+					forcedFinal: oldState.forcedFinal !== undefined ? oldState.forcedFinal : null,
+					forcedRaw: oldState.forcedRaw !== undefined ? oldState.forcedRaw : null
 				};
 			});
 		}
 		
-		currentInfos = newInfos;
-		// 最终渲染所有结果 (若是增量模式则不应再触发滚动)
-		render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput, false, hasScrolled);
+			currentInfos = newInfos;
+			// 最终渲染所有结果 (若是增量模式则不应再触发滚动)
+			render(currentInfos, currentInfos.map((i) => i.generated).join(''), currentDictResult, userInput, false, hasScrolled);
+			clearSlowQueryFeedback();
 		
 		} catch (error) {
 			console.error('执行失败:', error);
+			clearSlowQueryFeedback();
 		} finally {
 			// 确保移除加载状态
-			setTimeout(() => {
-				goBtn.classList.remove('loading');
-			}, 100);
+			if (!delegatedToAi) {
+				setTimeout(() => {
+					setGenerateButtonsLoading(false);
+				}, 100);
+			}
 		}
 	};
 
 	// 更新单个字符的声调或韵母
-	const updateSingleChar = async (index, newTone, newFinal) => {
+	const updateSingleChar = async (index, newTone, newFinal, newRaw = null) => {
 		if (!Array.isArray(currentInfos) || index < 0 || index >= currentInfos.length) return;
 		
 		const mySearchId = ++currentSearchId; // 同样增加 ID
@@ -1304,6 +1586,12 @@ const devLog = (...args) => {
 				if (newFinal !== null && newFinal !== undefined) {
 					updated.forcedFinal = newFinal;
 					updated.fin = newFinal;
+				}
+
+				// 更新拼音原文（用于多音字候选切换）
+				if (newRaw !== null && newRaw !== undefined) {
+					updated.forcedRaw = newRaw;
+					updated.raw = newRaw;
 				}
 				
 				return updated;
@@ -1404,6 +1692,7 @@ const devLog = (...args) => {
 			// 更新右侧生成结果面板
 			const output = document.getElementById('output');
 			const badges = document.getElementById('badges');
+			const noResultActions = document.getElementById('noResultActions');
 			
 			if (output) {
 				// 获取所有待显示的匹配结果及其等级
@@ -1437,6 +1726,12 @@ const devLog = (...args) => {
 						const filtered = filterByPingZe([item.phrase], pingzeFilter);
 						return filtered.length > 0;
 					});
+				}
+
+				const hasMeaningfulResult = resultsWithTier.some(item => item.phrase && item.phrase !== userInput);
+				if (noResultActions) {
+					const isAiMode = document.getElementById('aiMode')?.checked;
+					noResultActions.style.display = (!isAiMode && userInput && !hasMeaningfulResult) ? 'block' : 'none';
 				}
 				
 				// 5. 渲染 HTML (支持颜色标注)
@@ -1583,7 +1878,37 @@ const devLog = (...args) => {
 				
 				// 第二列：拼音
 				const td2 = document.createElement('td');
-				td2.textContent = i.raw || '-';
+				const pinyinText = document.createElement('div');
+				pinyinText.className = 'raw-pinyin';
+				pinyinText.textContent = i.raw || '-';
+				td2.appendChild(pinyinText);
+
+				const polyphonicOptions = getPolyphonicCandidates(i.char);
+				if (polyphonicOptions.length > 1) {
+					const polyphoneSelect = document.createElement('select');
+					polyphoneSelect.className = 'polyphone-select';
+					polyphoneSelect.dataset.index = index;
+
+					polyphonicOptions.forEach((option, optionIndex) => {
+						const opt = document.createElement('option');
+						opt.value = String(optionIndex);
+						opt.textContent = `${option.raw}`;
+						const sameRaw = option.raw === i.raw;
+						const sameTone = Number(option.tone) === Number(i.tone);
+						const sameFinal = option.fin === i.fin;
+						opt.selected = sameRaw && sameTone && sameFinal;
+						polyphoneSelect.appendChild(opt);
+					});
+
+					polyphoneSelect.addEventListener('change', (e) => {
+						const idx = Number(e.target.dataset.index);
+						const selected = polyphonicOptions[Number(e.target.value)];
+						if (!selected) return;
+						updateSingleChar(idx, selected.tone, selected.fin, selected.raw);
+					});
+
+					td2.appendChild(polyphoneSelect);
+				}
 				tr.appendChild(td2);
 				
 				// 第三列：声调
@@ -1659,14 +1984,51 @@ const devLog = (...args) => {
 			};
 		};
 
+		const renderQuickLists = () => {
+			const sourceInput = document.getElementById('source');
+			const historyListEl = document.getElementById('historyList');
+			if (!sourceInput || !historyListEl) return;
+
+			historyListEl.innerHTML = '';
+			const items = readList(HISTORY_KEY).slice(0, MAX_HISTORY);
+			if (!items.length) {
+				const empty = document.createElement('div');
+				empty.className = 'history-empty';
+				empty.textContent = '暂无历史查询';
+				historyListEl.appendChild(empty);
+				return;
+			}
+
+			items.forEach((item, index) => {
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'history-item';
+				btn.title = '点击快速查询';
+				btn.innerHTML = `<span class="history-index">${index + 1}.</span><span class="history-text">${item}</span>`;
+				btn.addEventListener('click', () => {
+					sourceInput.value = item;
+					sourceInput.blur();
+					process();
+				});
+				historyListEl.appendChild(btn);
+			});
+		};
+
 		const init = () => {
 			document.getElementById('go').addEventListener('click', process);
+			const goStickyBtn = document.getElementById('goSticky');
+			if (goStickyBtn) {
+				goStickyBtn.addEventListener('click', () => {
+					const source = document.getElementById('source');
+					if (source) source.blur();
+					process();
+				});
+			}
 			const sourceInput = document.getElementById('source');
 			
 			// 当输入框内容变化时，清除加载状态
 			sourceInput.addEventListener('input', () => {
-				const goBtn = document.getElementById('go');
-				goBtn.classList.remove('loading');
+				setGenerateButtonsLoading(false);
 			});
 			
 			// 键盘快捷键
@@ -1682,17 +2044,16 @@ const devLog = (...args) => {
 			const segmentBtns = loosenessSelector.querySelectorAll('.segment-btn');
 			
 			const pingzeFilterContainer = document.getElementById('pingzeFilterContainer');
+			const setLoosenessSelection = (value) => {
+				const target = String(value);
+				segmentBtns.forEach(b => b.classList.toggle('active', b.dataset.value === target));
+				loosenInput.value = target;
+			};
 			
 			// 监听分段选择器点击
 			segmentBtns.forEach(btn => {
 				btn.addEventListener('click', () => {
-					// 移除旧的 active 类
-					segmentBtns.forEach(b => b.classList.remove('active'));
-					// 添加新的 active 类
-					btn.classList.add('active');
-					// 更新隐藏的 input 值
-					const val = btn.dataset.value;
-					loosenInput.value = val;
+					setLoosenessSelection(btn.dataset.value);
 					
 					// 触发更新（使用防抖，避免 AI 模式下快速切换触发多次 API 请求）
 					updatePingzeFilterVisibility();
@@ -1729,12 +2090,45 @@ const devLog = (...args) => {
 				});
 			});
 
+			const noResultActions = document.getElementById('noResultActions');
+			if (noResultActions) {
+				noResultActions.addEventListener('click', (e) => {
+					const target = e.target.closest('button[data-action]');
+					if (!target) return;
+					const action = target.dataset.action;
+					const src = sourceInput.value.trim();
+					if (!src) return;
+
+					if (action === 'to-medium') {
+						setLoosenessSelection('0.5');
+					} else if (action === 'to-loose') {
+						setLoosenessSelection('1');
+					} else if (action === 'tail-only') {
+						const chars = Array.from(src);
+						if (chars.length > 2) {
+							sourceInput.value = chars.slice(-2).join('');
+						}
+						setLoosenessSelection('1');
+					}
+					updatePingzeFilterVisibility();
+					process();
+				});
+			}
+
 			const loadDictBtn = document.getElementById('loadDictBtn');
 			loadDictBtn.addEventListener('click', () => {
 				// 如果已经在加载中，不重复触发
 				if (window.isDictLoading) return;
 				loadDict();
 			});
+
+			const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+			if (clearHistoryBtn) {
+				clearHistoryBtn.addEventListener('click', () => {
+					writeList(HISTORY_KEY, []);
+					renderQuickLists();
+				});
+			}
 
 			const clearDictBtn = document.getElementById('clearDictBtn');
 			clearDictBtn.addEventListener('click', () => {
@@ -1773,9 +2167,9 @@ const devLog = (...args) => {
 					localStorage.removeItem('ONLINE_DICT_STATS');
 					localStorage.removeItem('ONLINE_DICT_SOURCE');
 					
-					bloomFilter = new BloomFilter();
 					window.dictLoaded = false;
 					globalDictData = null; // 同时清理内存数据
+					setDictLoadStatus('本地词库缓存已清理，请重新加载。', 'info');
 					
 					clearDictBtn.innerHTML = '<i class="ri-check-line"></i> 已清理';
 					updateDictStatus();
@@ -1806,6 +2200,8 @@ const devLog = (...args) => {
 			const openAiSettingsBtn = document.getElementById('openAiSettings');
 			const closeAiSettingsBtn = document.getElementById('closeAiSettings');
 			const saveAiSettingsBtn = document.getElementById('saveAiSettings');
+			const testAiSettingsBtn = document.getElementById('testAiSettings');
+			const aiTestStatus = document.getElementById('aiTestStatus');
 			const geminiApiKeyInput = document.getElementById('geminiApiKey');
 			const geminiProxyInput = document.getElementById('geminiProxy');
 
@@ -1835,6 +2231,9 @@ const devLog = (...args) => {
 			// Modal Logic
 			openAiSettingsBtn.addEventListener('click', () => {
 				aiSettingsModal.classList.add('active');
+				if (aiTestStatus) {
+					aiTestStatus.textContent = '';
+				}
 			});
 
 			const closeModal = () => {
@@ -1849,8 +2248,16 @@ const devLog = (...args) => {
 			saveAiSettingsBtn.addEventListener('click', () => {
 				localStorage.setItem('GEMINI_API_KEY', geminiApiKeyInput.value.trim());
 				localStorage.setItem('GEMINI_PROXY', geminiProxyInput.value.trim());
+				if (aiTestStatus) {
+					aiTestStatus.textContent = '设置已保存。';
+					aiTestStatus.dataset.type = 'success';
+				}
 				closeModal();
 			});
+
+			if (testAiSettingsBtn) {
+				testAiSettingsBtn.addEventListener('click', testAiConnection);
+			}
 
 			// Check if online dict is already loaded
 			const updateDictStatus = () => {
@@ -1866,10 +2273,14 @@ const devLog = (...args) => {
 					loadDictBtn.innerHTML = `✓ 已缓存`;
 					dictStatus.style.display = 'block';
 					dictStatusText.textContent = `📖 词库：${count} 个汉字（${source}） | ${date.toLocaleString('zh-CN')}`;
+					setDictLoadStatus('检测到本地词库缓存，可直接使用。', 'success');
+				} else {
+					setDictLoadStatus('首次使用将自动加载词库，请稍候。');
 				}
 			};
 			
 			updateDictStatus();
+			renderQuickLists();
 
 			// Expose debug utilities to window for console access
 			window.dictDebug = {
