@@ -2148,9 +2148,11 @@
     }
 
     @media (max-width: 768px) {
-      body {
-        padding-bottom: 110px !important;
-      }
+			body {
+				padding-bottom: 110px !important;
+				align-items: flex-start; /* 在小屏改为顶部对齐，避免垂直居中导致裁切 */
+				padding-top: 20px; /* 给内容留出顶部安全区 */
+			}
 
       .btn {
         min-height: 44px;
