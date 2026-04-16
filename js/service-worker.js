@@ -1,4 +1,4 @@
-// Version: v1.9.7
+// Version: v1.9.8
 importScripts('version.js');
 console.log('Debug: Service Worker initializing. Imported APP_VERSION =', typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'undefined');
 
