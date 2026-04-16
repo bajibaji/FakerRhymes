@@ -2138,7 +2138,7 @@ const devLog = (...args) => {
 				clearDictBtn.innerHTML = '<i class="ri-loader-4-line"></i> 清理中...';
 				clearDictBtn.disabled = true;
 
-				const handleClearCacheComplete = () => {
+				const handleClearCacheComplete = async () => {
 					// 关闭并清理 SQLite 数据库连接
 					if (window.dbManager && window.dbManager.reset) {
 						window.dbManager.reset();
@@ -2161,6 +2161,25 @@ const devLog = (...args) => {
 						console.warn('直接清理 IndexedDB 出错:', e);
 					}
 
+					// 新增：彻底清理 Service Worker 和 Cache Storage
+					try {
+						if ('caches' in window) {
+							const cacheNames = await caches.keys();
+							await Promise.all(cacheNames.map(name => caches.delete(name)));
+							console.log('Cache Storage 清理完成');
+						}
+						
+						if ('serviceWorker' in navigator) {
+							const registrations = await navigator.serviceWorker.getRegistrations();
+							for (let reg of registrations) {
+								await reg.unregister();
+							}
+							console.log('Service Worker 已注销');
+						}
+					} catch (e) {
+						console.warn('清理 Service Worker 缓存出错:', e);
+					}
+
 					localStorage.removeItem('ONLINE_DICT_TIME');
 					localStorage.removeItem('ONLINE_DICT_COUNT');
 					localStorage.removeItem('ONLINE_DICT_CACHE');
@@ -2169,7 +2188,7 @@ const devLog = (...args) => {
 					
 					window.dictLoaded = false;
 					globalDictData = null; // 同时清理内存数据
-					setDictLoadStatus('本地词库缓存已清理，请重新加载。', 'info');
+					setDictLoadStatus('所有缓存已彻底清理，请重新加载。', 'info');
 					
 					clearDictBtn.innerHTML = '<i class="ri-check-line"></i> 已清理';
 					updateDictStatus();
