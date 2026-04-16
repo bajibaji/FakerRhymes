@@ -2205,6 +2205,9 @@ const devLog = (...args) => {
 					setTimeout(() => {
 						clearDictBtn.innerHTML = originalText;
 						clearDictBtn.disabled = false;
+						// 强制加上时间戳参数刷新页面，彻底摆脱由于 URL 相同导致的浏览器 HTTP 强缓存
+						const ts = new Date().getTime();
+						window.location.href = window.location.pathname + '?clear=' + ts;
 					}, 1500);
 				};
 
