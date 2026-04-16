@@ -245,7 +245,7 @@ const devLog = (...args) => {
 						setDictLoadStatus('词库已就绪，可离线使用。', 'success');
 						
 						if (btn) {
-							btn.innerHTML = `✅ 词库已就绪 (SQLite)`;
+							btn.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#10b981; margin-right:4px;"></i> 词库已就绪 (SQLite)`;
 							btn.disabled = true;
 							btn.style.cursor = 'default';
 							btn.style.opacity = '0.8';
@@ -434,7 +434,7 @@ const devLog = (...args) => {
 				
 				// 更新 UI
 				if (btn) {
-					btn.innerHTML = `✅ 词库已就绪 (SQLite)`;
+					btn.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#10b981; margin-right:4px;"></i> 词库已就绪 (SQLite)`;
 					btn.disabled = true; // 加载成功后禁用
 					btn.style.cursor = 'default';
 					btn.style.opacity = '0.8';
@@ -1311,7 +1311,7 @@ const devLog = (...args) => {
 		if (Array.from(src).length < 2) {
 			setGenerateButtonsLoading(false);
 			clearSlowQueryFeedback();
-			render([], '⚠️ 请输入至少两个字符以获得更精准的押韵结果。', null, '');
+			render([], '<i class="ri-alert-fill" style="color:#f59e0b; margin-right:4px;"></i> 请输入至少两个字符以获得更精准的押韵结果。', null, '');
 			return;
 		}
 
@@ -1319,7 +1319,7 @@ const devLog = (...args) => {
 		if (!hasChineseChars(src)) {
 			setGenerateButtonsLoading(false);
 			clearSlowQueryFeedback();
-			render([], '⚠️ 仅支持中文词语查询，请输入中文。', null, '');
+			render([], '<i class="ri-alert-fill" style="color:#f59e0b; margin-right:4px;"></i> 仅支持中文词语查询，请输入中文。', null, '');
 			return;
 		}
 		addToHistory(src);

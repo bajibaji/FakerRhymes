@@ -5,7 +5,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
 	<title>废物韵脚生成器</title>
-	<script src="js/version.js?v=1.9.8"></script>
+	<script src="js/version.js?v=1.9.9"></script>
 	<!-- 引入 sql.js WASM -->
 	<script src="js/lib/sql-wasm.min.js"></script>
 	<link rel="preconnect" href="https://unpkg.com" />
@@ -17,7 +17,7 @@
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<link rel="icon" type="image/svg+xml" href="/icon.svg" />
 	<link rel="manifest" href="manifest.json" />
-	<link rel="stylesheet" href="css/style.css?v=1.9.8" />
+	<link rel="stylesheet" href="css/style.css?v=1.9.9" />
 </head>
 
 <body>
@@ -32,7 +32,7 @@
 		<header>
 			<h1>废物韵脚生成器 <span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
-			<p class="subtitle">输入韵脚，自动提取拼音、声调与韵母，生成同调同韵的押韵词语。</p>
+			<p class="subtitle">输入词语，自动生成同调同韵的押韵词，直接飞升成为顶级说唱歌手</p>
 		</header>
 
 		<main>
@@ -57,7 +57,7 @@
 				<div class="controls" style="display: flex; flex-direction: column; gap: 1px; margin-top: 12px;">
 					<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
 						<button class="btn" id="go">生成押韵</button>
-						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字">📚 加载词库</button>
+						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字"><i class="ri-book-read-line"></i> 加载词库</button>
 					</div>
 					<label class="small" style="margin-top: 10px;">韵脚宽松度</label>
 					<div class="segmented-control" id="loosenessSelector">
@@ -104,7 +104,7 @@
 					</div>
 				</div>
 
-				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;"
+				<div style="color:#fbbf24; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;"
 					id="dictWarning">*初次使用加载词库会有点慢喔*</div>
 				<div class="hint">严格：同韵同调 | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
@@ -207,7 +207,7 @@
 	</div>
 
 	<!-- Help Button -->
-	<button class="help-btn" id="helpTriggerBtn" title="使用说明">?</button>
+	<button class="help-btn" id="helpTriggerBtn" title="使用说明"><i class="ri-question-mark"></i></button>
 
 	<!-- Modal -->
 	<div class="modal-overlay" id="helpModalOverlay">
@@ -217,7 +217,7 @@
 				<button class="modal-close" id="helpCloseBtn">&times;</button>
 			</div>
 			<div class="modal-content">
-				<h3>📚 基本功能</h3>
+				<h3><i class="ri-book-open-line"></i> 基本功能</h3>
 				<ul>
 					<li><strong>加载词库：</strong>首次使用会自动<strong>加载词库</strong>，加载完成后自动保存到本地，下次无需重新加载</li>
 					<li><strong>输入文字：</strong>在输入框中输入需要押韵的词语</li>
@@ -226,14 +226,14 @@
 					<li><strong>音调选择：</strong>生成后可在「音调选择」表格中手动调整每个字的韵母，重新匹配</li>
 				</ul>
 
-				<h3>⚙️ 高级功能</h3>
+				<h3><i class="ri-settings-4-line"></i> 高级功能</h3>
 				<ul>
 					<li><strong>AI 押韵模式：</strong>勾选后可借助 AI 生成更有创意的押韵，需在右侧设置中填入 Gemini API Key</li>
 					<li><strong>自定义词库：</strong>点击右上角<strong>「自定义词库」</strong>按钮，可添加自己的词语，会优先出现在结果中</li>
 					<li><strong>清理缓存：</strong>点击底部「清理缓存」可删除本地词库，下次需重新加载</li>
 				</ul>
 
-				<h3>💡 使用技巧</h3>
+				<h3><i class="ri-lightbulb-flash-line"></i> 使用技巧</h3>
 				<ul>
 					<li>建议先用「严格」模式，找不到满意结果再切换到「中等」或「最松」</li>
 					<li>输入词语的最后两个字决定韵脚，可以尝试不同的词尾</li>
@@ -241,7 +241,7 @@
 					<li>结果显示乱码说明没有匹配，放宽宽松度即可</li>
 				</ul>
 
-				<h3>ℹ️ 关于</h3>
+				<h3><i class="ri-information-line"></i> 关于</h3>
 				<p>废壳韵脚生成器 —— 帮助创作者快速寻找中文押韵灵感。</p>
 				<p>词库基于雾凇拼音、中华新华字典及清华大学开放中文词库，查询算法基于 pinyin-pro。</p>
 				<p
@@ -252,16 +252,16 @@
 		</div>
 	</div>
 
-	<script src="./js/data.js?v=1.9.8" defer></script>
+	<script src="./js/data.js?v=1.9.9" defer></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer
 		onerror="console.warn('GSAP CDN加载失败')"></script>
-	<script src="./js/data.js?v=1.9.8" defer></script>
-	<script src="./js/db.js?v=1.9.8" defer></script>
-	<script src="./js/animations.js?v=1.9.8" defer></script>
-	<script src="./js/main.js?v=1.9.8" defer></script>
-	<script src="./js/sw-init.js?v=1.9.8" defer></script>
-	<script src="./js/help-modal.js?v=1.9.8" defer></script>
-	<script src="./js/performance-test.js?v=1.9.8" defer></script>
+	<script src="./js/data.js?v=1.9.9" defer></script>
+	<script src="./js/db.js?v=1.9.9" defer></script>
+	<script src="./js/animations.js?v=1.9.9" defer></script>
+	<script src="./js/main.js?v=1.9.9" defer></script>
+	<script src="./js/sw-init.js?v=1.9.9" defer></script>
+	<script src="./js/help-modal.js?v=1.9.9" defer></script>
+	<script src="./js/performance-test.js?v=1.9.9" defer></script>
 </body>
 
 </html>
