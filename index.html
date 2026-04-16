@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh">
+
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-	<title>废壳韵脚生成器</title>
+	<title>废物韵脚生成器</title>
 	<script src="js/version.js"></script>
 	<!-- 引入 sql.js WASM -->
 	<script src="js/lib/sql-wasm.min.js"></script>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+		rel="stylesheet" />
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<link rel="icon" type="image/svg+xml" href="/icon.svg" />
 	<link rel="manifest" href="manifest.json" />
@@ -20,26 +23,28 @@
 <body>
 	<!-- 粒子背景画布 -->
 	<canvas id="particles-canvas"></canvas>
-	
+
 	<div class="bg-blob blob-1"></div>
 	<div class="bg-blob blob-2"></div>
 	<div class="bg-blob blob-3"></div>
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 <span style="font-size: 0.5em;">[网页版]</span></h1>
+			<h1>废物韵脚生成器 <span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入韵脚，自动提取拼音、声调与韵母，生成同调同韵的押韵词语。</p>
 		</header>
 
 		<main>
 			<section class="panel">
-				<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; margin-bottom: 10px;">
+				<div
+					style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; margin-bottom: 10px;">
 					<label for="source">请输入要押韵的词语：</label>
 					<a class="btn ghost small" href="custom.html"><i class="ri-file-list-3-line"></i>自定义词库</a>
 				</div>
 				<div class="input-history-layout">
-					<textarea id="source" placeholder="示例：废壳" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="search" spellcheck="false"></textarea>
+					<textarea id="source" placeholder="示例：废壳" autocomplete="off" autocorrect="off" autocapitalize="off"
+						enterkeyhint="search" spellcheck="false"></textarea>
 					<aside class="history-side">
 						<div class="history-head">
 							<div class="history-title">最近查询</div>
@@ -61,20 +66,24 @@
 						<button type="button" class="segment-btn" data-value="1">最松</button>
 					</div>
 					<input type="hidden" id="looseness" value="0.0" />
-					
+
 					<!-- 平仄过滤选择器（仅在最松时显示） -->
-					<div id="pingzeFilterContainer" style="display: none; margin-top: 10px; padding: 10px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border: 1px solid var(--border);">
+					<div id="pingzeFilterContainer"
+						style="display: none; margin-top: 10px; padding: 10px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border: 1px solid var(--border);">
 						<label class="small" style="margin-bottom: 8px; display: block;">平仄过滤（尾字声调）</label>
 						<div style="display: flex; gap: 8px; flex-wrap: wrap;">
-							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
+							<label
+								style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
 								<input type="radio" name="pingze" value="all" checked style="cursor: pointer;" />
 								<span>全部</span>
 							</label>
-							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
+							<label
+								style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
 								<input type="radio" name="pingze" value="ping" style="cursor: pointer;" />
 								<span>平</span>
 							</label>
-							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
+							<label
+								style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; margin: 0;">
 								<input type="radio" name="pingze" value="ze" style="cursor: pointer;" />
 								<span>仄</span>
 							</label>
@@ -82,23 +91,27 @@
 					</div>
 				</div>
 
-				<div class="controls" style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+				<div class="controls"
+					style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
 					<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
 						<div style="display: flex; align-items: center; gap: 8px;">
 							<input type="checkbox" id="aiMode" style="width: 18px; height: 18px; cursor: pointer;" />
-							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode"><i class="ri-robot-2-line"></i> AI 押韵模式 </label>
+							<label class="small" style="margin-bottom: 0; cursor: pointer;" for="aiMode"><i
+									class="ri-robot-2-line"></i> AI 押韵模式 </label>
 						</div>
-						<button class="btn ghost small" id="openAiSettings" title="AI 设置"><i class="ri-settings-3-line"></i></button>
+						<button class="btn ghost small" id="openAiSettings" title="AI 设置"><i
+								class="ri-settings-3-line"></i></button>
 					</div>
 				</div>
 
-				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;" id="dictWarning">*初次使用加载词库会有点慢喔*</div>
-				<div class="hint">严格：同韵同调  | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
+				<div style="color:brown; font-size: small; font-weight: bold; text-align: center; margin-top: 12px;"
+					id="dictWarning">*初次使用加载词库会有点慢喔*</div>
+				<div class="hint">严格：同韵同调 | 中等：韵母放宽（鼻音、翘舌） | 最松：韵母进一步放宽，忽略声调。</div>
 				<div class="hint">- 生成结果的词是乱码的话，说明没有结果，放宽韵脚宽松度即可</div>
 				<div class="hint">- 越宽松需要查询的时间越长，请耐心等待</div>
 				<div class="hint dict-load-status" id="dictLoadStatus" aria-live="polite"></div>
-				
-				
+
+
 			</section>
 
 			<section class="panel" id="resultsPanel">
@@ -134,22 +147,30 @@
 		</section>
 
 		<section class="panel">
-			<div id="matchedResults" style="padding: 16px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 12px; display: none;">
-				<div style="font-weight: 600; margin-bottom: 4px; color: var(--accent-2); display: flex; align-items: center; gap: 6px;">
+			<div id="matchedResults"
+				style="padding: 16px; background: rgba(34, 211, 238, 0.05); border: 1px solid var(--border); border-radius: 12px; display: none;">
+				<div
+					style="font-weight: 600; margin-bottom: 4px; color: var(--accent-2); display: flex; align-items: center; gap: 6px;">
 					<i class="ri-lightbulb-flash-line"></i> 更多匹配结果
 				</div>
 				<div id="matchedResultsList" class="match-grid"></div>
 			</div>
-			<div id="dictStatus" style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
+			<div id="dictStatus"
+				style="margin-top: 12px; padding: 8px 12px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; font-size: 12px; color: var(--muted); display: none;">
 				<span id="dictStatusText"></span>
 			</div>
 		</section>
 
-		<div class="footer">词库基于雾凇拼音词库以及中华新华字典数据库以及清华大学开放中文词库，查询算法基于 pinyin-pro 解析。点击"📚 加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
+		<div class="footer">词库基于雾凇拼音词库以及中华新华字典数据库以及清华大学开放中文词库，查询算法基于 pinyin-pro 解析。点击"📚
+			加载词库"可从在线词典获取7000+汉字，数据缓存在本地，可离线使用。</div>
 
-		<div style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
-			<button class="btn ghost small" id="clearDictBtn" title="清理本地缓存的词库数据" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><i class="ri-delete-bin-line"></i> 清理缓存</button>
-			<a class="btn ghost small" href="https://github.com/bajibaji/FakerRhymes/releases/" target="_blank" title="下载桌面版本"><i class="ri-computer-line"></i> 下载 PC 版</a>
+		<div
+			style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+			<button class="btn ghost small" id="clearDictBtn" title="清理本地缓存的词库数据"
+				style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><i class="ri-delete-bin-line"></i>
+				清理缓存</button>
+			<a class="btn ghost small" href="https://github.com/bajibaji/FakerRhymes/releases/" target="_blank"
+				title="下载桌面版本"><i class="ri-computer-line"></i> 下载 PC 版</a>
 		</div>
 	</div>
 
@@ -163,12 +184,15 @@
 			<div class="settings-group">
 				<div class="settings-item">
 					<label for="geminiApiKey">Gemini API Key</label>
-					<input type="text" id="geminiApiKey" placeholder="输入 Gemini API Key" style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
-					<div class="hint">没有 Key？<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-2);">点击获取</a></div>
+					<input type="text" id="geminiApiKey" placeholder="输入 Gemini API Key"
+						style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
+					<div class="hint">没有 Key？<a href="https://aistudio.google.com/app/apikey" target="_blank"
+							style="color: var(--accent-2);">点击获取</a></div>
 				</div>
 				<div class="settings-item">
 					<label for="geminiProxy">API 代理地址 (可选)</label>
-					<input type="text" id="geminiProxy" placeholder="例如: https://proxy.com" style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
+					<input type="text" id="geminiProxy" placeholder="例如: https://proxy.com"
+						style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
 					<div class="hint">解决 Failed to fetch 错误。</div>
 				</div>
 				<div class="settings-item">
@@ -192,43 +216,45 @@
 				<h2>使用说明</h2>
 				<button class="modal-close" id="helpCloseBtn">&times;</button>
 			</div>
-						<div class="modal-content">
-						<h3>📚 基本功能</h3>
-						<ul>
-							<li><strong>加载词库：</strong>首次使用会自动<strong>加载词库</strong>，加载完成后自动保存到本地，下次无需重新加载</li>
-							<li><strong>输入文字：</strong>在输入框中输入需要押韵的词语</li>
-							<li><strong>生成押韵：</strong>点击<strong>「生成押韵」</strong>按钮，系统自动分析韵脚并返回匹配词汇</li>
-							<li><strong>韵脚宽松度：</strong>点击「严格 / 中等 / 最松」切换匹配精度；选「最松」后可额外按平仄（平声 1/2 调 vs 仄声 3/4 调）筛选结果</li>
-							<li><strong>音调选择：</strong>生成后可在「音调选择」表格中手动调整每个字的韵母，重新匹配</li>
-						</ul>
-			
-						<h3>⚙️ 高级功能</h3>
-						<ul>
-							<li><strong>AI 押韵模式：</strong>勾选后可借助 AI 生成更有创意的押韵，需在右侧设置中填入 Gemini API Key</li>
-							<li><strong>自定义词库：</strong>点击右上角<strong>「自定义词库」</strong>按钮，可添加自己的词语，会优先出现在结果中</li>
-							<li><strong>清理缓存：</strong>点击底部「清理缓存」可删除本地词库，下次需重新加载</li>
-						</ul>
-			
-						<h3>💡 使用技巧</h3>
-						<ul>
-							<li>建议先用「严格」模式，找不到满意结果再切换到「中等」或「最松」</li>
-							<li>输入词语的最后两个字决定韵脚，可以尝试不同的词尾</li>
-							<li>「更多匹配结果」区域常有意想不到的长词，适合填词、说唱创作</li>
-							<li>结果显示乱码说明没有匹配，放宽宽松度即可</li>
-						</ul>
-			
-						<h3>ℹ️ 关于</h3>
-						<p>废壳韵脚生成器 —— 帮助创作者快速寻找中文押韵灵感。</p>
-						<p>词库基于雾凇拼音、中华新华字典及清华大学开放中文词库，查询算法基于 pinyin-pro。</p>
-						<p style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center;">
-							爷不肉，蛋卷制造 2026
-						</p>
-					</div>
+			<div class="modal-content">
+				<h3>📚 基本功能</h3>
+				<ul>
+					<li><strong>加载词库：</strong>首次使用会自动<strong>加载词库</strong>，加载完成后自动保存到本地，下次无需重新加载</li>
+					<li><strong>输入文字：</strong>在输入框中输入需要押韵的词语</li>
+					<li><strong>生成押韵：</strong>点击<strong>「生成押韵」</strong>按钮，系统自动分析韵脚并返回匹配词汇</li>
+					<li><strong>韵脚宽松度：</strong>点击「严格 / 中等 / 最松」切换匹配精度；选「最松」后可额外按平仄（平声 1/2 调 vs 仄声 3/4 调）筛选结果</li>
+					<li><strong>音调选择：</strong>生成后可在「音调选择」表格中手动调整每个字的韵母，重新匹配</li>
+				</ul>
+
+				<h3>⚙️ 高级功能</h3>
+				<ul>
+					<li><strong>AI 押韵模式：</strong>勾选后可借助 AI 生成更有创意的押韵，需在右侧设置中填入 Gemini API Key</li>
+					<li><strong>自定义词库：</strong>点击右上角<strong>「自定义词库」</strong>按钮，可添加自己的词语，会优先出现在结果中</li>
+					<li><strong>清理缓存：</strong>点击底部「清理缓存」可删除本地词库，下次需重新加载</li>
+				</ul>
+
+				<h3>💡 使用技巧</h3>
+				<ul>
+					<li>建议先用「严格」模式，找不到满意结果再切换到「中等」或「最松」</li>
+					<li>输入词语的最后两个字决定韵脚，可以尝试不同的词尾</li>
+					<li>「更多匹配结果」区域常有意想不到的长词，适合填词、说唱创作</li>
+					<li>结果显示乱码说明没有匹配，放宽宽松度即可</li>
+				</ul>
+
+				<h3>ℹ️ 关于</h3>
+				<p>废壳韵脚生成器 —— 帮助创作者快速寻找中文押韵灵感。</p>
+				<p>词库基于雾凇拼音、中华新华字典及清华大学开放中文词库，查询算法基于 pinyin-pro。</p>
+				<p
+					style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center;">
+					爷不肉，蛋卷制造 2026
+				</p>
+			</div>
 		</div>
 	</div>
 
 	<script src="./js/data.js" defer></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer onerror="console.warn('GSAP CDN加载失败')"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer
+		onerror="console.warn('GSAP CDN加载失败')"></script>
 	<script src="./js/data.js" defer></script>
 	<script src="./js/db.js" defer></script>
 	<script src="./js/animations.js" defer></script>
@@ -237,4 +263,5 @@
 	<script src="./js/help-modal.js" defer></script>
 	<script src="./js/performance-test.js" defer></script>
 </body>
+
 </html>
