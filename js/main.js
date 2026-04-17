@@ -244,12 +244,13 @@ const devLog = (...args) => {
 						localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
 						setDictLoadStatus('词库已就绪，可离线使用。', 'success');
 						
-						if (btn) {
-							btn.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#10b981; margin-right:4px;"></i> 词库已就绪 (SQLite)`;
-							btn.disabled = true;
-							btn.style.cursor = 'default';
-							btn.style.opacity = '0.8';
-							btn.title = `已加载数据库`;
+						if (btn) btn.style.display = 'none';
+						
+						const warning = document.getElementById('dictWarning');
+						if (warning) {
+							warning.innerHTML = '<i class="ri-checkbox-circle-fill" style="margin-right:2px;"></i> 词库已就绪 (SQLite)';
+							warning.style.color = '#10b981';
+							warning.style.display = 'block';
 						}
 						return;
 					}
@@ -433,16 +434,14 @@ const devLog = (...args) => {
 				devLog('词库就绪耗时:', (performance.now() - startTime).toFixed(2), 'ms');
 				
 				// 更新 UI
-				if (btn) {
-					btn.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#10b981; margin-right:4px;"></i> 词库已就绪 (SQLite)`;
-					btn.disabled = true; // 加载成功后禁用
-					btn.style.cursor = 'default';
-					btn.style.opacity = '0.8';
-					btn.title = `已加载数据库`;
-				}
+				if (btn) btn.style.display = 'none';
 				
 				const warning = document.getElementById('dictWarning');
-				if (warning) warning.style.display = 'none';
+				if (warning) {
+					warning.innerHTML = '<i class="ri-checkbox-circle-fill" style="margin-right:2px;"></i> 词库已就绪 (SQLite)';
+					warning.style.color = '#10b981';
+					warning.style.display = 'block';
+				}
 
 			} catch (e) {
 				console.error('极速载入失败:', e);

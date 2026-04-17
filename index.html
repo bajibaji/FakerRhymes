@@ -57,7 +57,6 @@
 				<div class="controls" style="display: flex; flex-direction: column; gap: 1px; margin-top: 12px;">
 					<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
 						<button class="btn" id="go">生成押韵</button>
-						<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字"><i class="ri-book-read-line"></i> 加载词库</button>
 					</div>
 					<label class="small" style="margin-top: 10px;">韵脚宽松度</label>
 					<div class="segmented-control" id="loosenessSelector">
@@ -139,7 +138,7 @@
 						<th>原字</th>
 						<th>拼音</th>
 						<th>声调</th>
-						<th>选择韵母</th>
+						<th style="color: var(--accent-2);">选择韵母</th>
 					</tr>
 				</thead>
 				<tbody id="detailBody"></tbody>
@@ -166,6 +165,7 @@
 
 		<div
 			style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+			<button class="btn ghost small" id="loadDictBtn" title="从在线词库加载更多汉字"><i class="ri-book-read-line"></i> 加载词库</button>
 			<button class="btn ghost small" id="clearDictBtn" title="清理本地缓存的词库数据"
 				style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><i class="ri-delete-bin-line"></i>
 				清理缓存</button>
