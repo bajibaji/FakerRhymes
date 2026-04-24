@@ -50,6 +50,15 @@ const devLog = (...args) => {
 			el.dataset.type = type;
 		};
 
+		// 屏幕顶部细进度条
+		const setTopProgress = (percent) => {
+			const bar = document.getElementById('topProgressBar');
+			if (!bar) return;
+			const pct = Math.min(100, Math.max(0, percent));
+			bar.style.width = pct + '%';
+			bar.classList.remove('complete', 'error');
+		};
+
 		const setQueryStatus = (msg = '') => {
 			const el = document.getElementById('queryStatus');
 			if (!el) return;
@@ -195,11 +204,15 @@ const devLog = (...args) => {
 		};
 
 		// Final to short code mapping
+		// 编码版本历史:
+		//   v1 (隐含): 'ü':'B', 'üan':'C', 'ün':'D' — 但 detectFinal 输出 v/van/vn，导致字典导入与查询编码不一致
+		//   v2 (当前): 'ü':'y' — 与 'v':'y' 一致，字典 ü4 与查询 v4 均编码为 y4
+		const DICT_ENCODING_VERSION = '2';
 		const finalToCode = {
 			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
 			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
 			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
-			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'B', 'üan': 'C', 'ün': 'D'
+			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y'
 		};
 
 		function encodeKey(key) {
@@ -222,6 +235,7 @@ const devLog = (...args) => {
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
 			setDictLoadStatus('正在准备词库...');
+			setTopProgress(0);
 
 			const btn = document.getElementById('loadDictBtn');
 			const originalBtnText = btn ? btn.innerHTML : '📚 加载词库';
@@ -235,6 +249,27 @@ const devLog = (...args) => {
 				// 尝试初始化数据库，如果已存在则不需要加载 JSON
 				try {
 					const db = await window.dbManager.init();
+
+					// 编码版本迁移：检测 DICT_ENCODING_VERSION 变化，不一致时清空旧库强制重导
+					// v1 从未保存版本号，因此 storedVersion 为 null 时也需要迁移（若有旧数据）
+					const storedVersion = localStorage.getItem('DICT_ENCODING_VERSION');
+					const needMigration = storedVersion !== DICT_ENCODING_VERSION;
+					if (needMigration && await window.dbManager.checkDataExists()) {
+						devLog(`字典编码版本变更 (v${storedVersion || '1'} → v${DICT_ENCODING_VERSION})，清空旧数据重新导入...`);
+						setDictLoadStatus('检测到词库编码更新，正在重建...');
+						window.dbManager.reset();
+						try {
+							await new Promise((resolve, reject) => {
+								const deleteReq = indexedDB.deleteDatabase('RhymeSQLiteDB');
+								deleteReq.onsuccess = resolve;
+								deleteReq.onerror = reject;
+								deleteReq.onblocked = resolve;
+							});
+						} catch(e) { console.warn('删除旧 IndexedDB 失败:', e); }
+						await window.dbManager.init();
+						devLog('旧数据库已清空，准备重新导入');
+					}
+
 					if (await window.dbManager.checkDataExists()) {
 						devLog('SQLite 数据库已准备就绪，跳过 JSON 加载');
 						window.dictLoaded = true;
@@ -242,7 +277,13 @@ const devLog = (...args) => {
 						localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
 						localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
 						localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
+						localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
 						setDictLoadStatus('词库已就绪，可离线使用。', 'success');
+						setTopProgress(100);
+						setTimeout(() => {
+							const bar = document.getElementById('topProgressBar');
+							if (bar) bar.classList.add('complete');
+						}, 800);
 						
 						if (btn) btn.style.display = 'none';
 						
@@ -331,6 +372,7 @@ const devLog = (...args) => {
 						const percent = Math.min(99, Math.round((currentLoaded / totalSize) * 100));
 						if (btn) btn.innerHTML = `<i class="ri-loader-4-line"></i> 载入中 ${percent}%`;
 						setDictLoadStatus(`下载词库中 ${percent}%`);
+						setTopProgress(percent * 0.45);
 					}
 					
 					const blob = new Blob(chunks);
@@ -347,6 +389,7 @@ const devLog = (...args) => {
 				
 				if (btn) btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
 				setDictLoadStatus('词库下载完成，正在解析...');
+				setTopProgress(48);
 
 				// 初始化 SQLite 数据库
 				const db = await window.dbManager.init();
@@ -391,6 +434,7 @@ const devLog = (...args) => {
 								const importPercent = (i * 33 + (j / keys.length) * 33).toFixed(0);
 								if (btn) btn.innerHTML = `<i class="ri-database-2-line"></i> 导入中 ${importPercent}%...`;
 								setDictLoadStatus(`写入本地数据库中 ${importPercent}%`);
+								setTopProgress(50 + Number(importPercent) * 0.40);
 								
 								// 增加延时 (0ms -> 5ms)，确保浏览器有足够时间渲染帧
 								await new Promise(resolve => setTimeout(resolve, 5));
@@ -410,6 +454,7 @@ const devLog = (...args) => {
 					// 显式保存到 IndexedDB
 					if (btn) btn.innerHTML = '<i class="ri-save-3-line"></i> 正在写入硬盘...';
 					setDictLoadStatus('正在写入浏览器本地存储...');
+					setTopProgress(93);
 					await new Promise(resolve => setTimeout(resolve, 50)); 
 					
 					// 强制在下一次事件循环中执行 save，防止卡死当前渲染帧
@@ -430,8 +475,14 @@ const devLog = (...args) => {
 				localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
 				localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
 				localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
+				localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
 				setDictLoadStatus('词库加载完成，后续可离线使用。', 'success');
 				devLog('词库就绪耗时:', (performance.now() - startTime).toFixed(2), 'ms');
+				setTopProgress(100);
+				setTimeout(() => {
+					const bar = document.getElementById('topProgressBar');
+					if (bar) bar.classList.add('complete');
+				}, 800);
 				
 				// 更新 UI
 				if (btn) btn.style.display = 'none';
@@ -447,6 +498,11 @@ const devLog = (...args) => {
 				console.error('极速载入失败:', e);
 				window.isDictLoading = false;
 				setDictLoadStatus(`词库加载失败：${e.message || '请重试'}`, 'error');
+				setTopProgress(100);
+				setTimeout(() => {
+					const bar = document.getElementById('topProgressBar');
+					if (bar) bar.classList.add('error');
+				}, 100);
 				
 				if (btn) {
 					btn.innerHTML = '❌ 加载失败 (点击重试)';
@@ -636,13 +692,13 @@ const devLog = (...args) => {
 		const thirteenTracks = [
 			{ name: '发花辙', finals: ['a', 'ia', 'ua'] },
 			{ name: '梭波辙', finals: ['o', 'e', 'uo'] },
-			{ name: '乜斜辙', finals: ['ie', 'ue', 've'] },
-			{ name: '言前辙', finals: ['an', 'ian', 'uan', 'van', 'üan'] },
+			{ name: '乜斜辙', finals: ['ie', 've'] },
+			{ name: '言前辙', finals: ['an', 'ian', 'uan', 'van'] },
 			{ name: '人辰辙-深', finals: ['en', 'un'] },
-			{ name: '人辰辙-亲', finals: ['in', 'vn', 'ün'] },
+			{ name: '人辰辙-亲', finals: ['in', 'vn'] },
 			{ name: '江阳辙', finals: ['ang', 'iang', 'uang'] },
 			{ name: '中东辙', finals: ['eng', 'ing', 'ong', 'iong'] },
-			{ name: '一七辙', finals: ['i', 'v', 'er', 'ü', 'i-flat', 'i-retro'] },
+			{ name: '一七辙', finals: ['i', 'v', 'er', 'i-flat', 'i-retro'] },
 			{ name: '姑苏辙', finals: ['u'] },
 			{ name: '怀来辙', finals: ['ai', 'uai'] },
 			{ name: '灰堆辙', finals: ['ei', 'ui', 'uei'] },
@@ -988,7 +1044,7 @@ const devLog = (...args) => {
 			// Tier 1 & 2: 宽松模式 (合并平翘舌，合并前后鼻音)
 			
 			// 1. 前后鼻音合并：言前(an) + 江阳(ang)
-			const groupAnAng = ['an', 'ian', 'uan', 'van', 'üan', 'ang', 'iang', 'uang'];
+			const groupAnAng = ['an', 'ian', 'uan', 'van', 'ang', 'iang', 'uang'];
 			if (groupAnAng.includes(fin)) return groupAnAng;
 
 			// 2. 前后鼻音合并：
@@ -996,8 +1052,8 @@ const devLog = (...args) => {
 			const groupEnEng = ['en', 'un', 'eng', 'ong', 'iong'];
 			if (groupEnEng.includes(fin)) return groupEnEng;
 
-			// 人辰-亲(in/vn/ün) + 中东-ing(ing) -> 实际上 in 和 ing 押韵更近
-			const groupInIng = ['in', 'vn', 'ün', 'ing'];
+			// 人辰-亲(in/vn) + 中东-ing(ing) -> 实际上 in 和 ing 押韵更近
+			const groupInIng = ['in', 'vn', 'ing'];
 			if (groupInIng.includes(fin)) return groupInIng;
 
 			// 3. 其他情况（包括 i-flat/i-retro 归为一七辙），使用十三辙

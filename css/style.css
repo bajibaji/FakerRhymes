@@ -20,6 +20,30 @@
 	}
 }
 
+/* 屏幕顶部加载进度条 */
+.top-progress-bar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 0%;
+	height: 3px;
+	background: linear-gradient(90deg, #7c3aed, #22d3ee);
+	z-index: 9999;
+	transition: width 0.3s ease, opacity 0.5s ease;
+	will-change: width, opacity;
+	box-shadow: 0 0 8px rgba(124, 58, 237, 0.4);
+	pointer-events: none;
+}
+
+.top-progress-bar.complete {
+	opacity: 0;
+}
+
+.top-progress-bar.error {
+	background: linear-gradient(90deg, #ef4444, #f97316);
+	box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
 .output span {
 	display: inline-block;
 	will-change: transform, opacity, filter;
