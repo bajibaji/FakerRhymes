@@ -126,7 +126,6 @@ function querySuffix(suffix2, minLength, pattern) {
 function querySuffixBatch(queries, globalLimit = 500) {
 	if (!db || !queries || queries.length === 0) return [];
 
-	// 按 (suffix2, minLength) 分组，同组的 LIKE 条件用 OR 合并
 	const groups = new Map();
 	for (const q of queries) {
 		const groupKey = `${q.suffix2}||${q.minLength}`;
@@ -137,19 +136,21 @@ function querySuffixBatch(queries, globalLimit = 500) {
 	}
 
 	const results = [];
+	const maxPerGroup = Math.ceil(globalLimit / Math.max(1, groups.size));
 	for (const group of groups.values()) {
+		if (results.length >= globalLimit) break;
+
 		const { suffix2, minLength, keys } = group;
 		const keyArr = Array.from(keys);
-		// 用 OR 合并多个 LIKE '%xxx' 条件，保留后缀匹配语义（找更长的词）
 		const likeConditions = keyArr.map(() => `encoded_key LIKE ?`).join(' OR ');
-		const sql = `SELECT phrase, encoded_key FROM words WHERE suffix_2 = ? AND length > ? AND (${likeConditions}) ORDER BY length ASC LIMIT ${globalLimit}`;
-		const params = [suffix2, minLength, ...keyArr.map(k => '%' + k)];
+		const sql = `SELECT phrase, encoded_key FROM words WHERE suffix_2 = ? AND length > ? AND (${likeConditions}) ORDER BY length ASC LIMIT ?`;
+		const params = [suffix2, minLength, ...keyArr.map(k => '%' + k), maxPerGroup];
 		const stmt = db.prepare(sql);
 		stmt.bind(params);
 		while (stmt.step()) results.push(stmt.getAsObject());
 		stmt.free();
 	}
-	return results;
+	return results.slice(0, globalLimit);
 }
 
 // 查询多个键

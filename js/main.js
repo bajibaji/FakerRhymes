@@ -206,13 +206,14 @@ const devLog = (...args) => {
 		// Final to short code mapping
 		// 编码版本历史:
 		//   v1 (隐含): 'ü':'B', 'üan':'C', 'ün':'D' — 但 detectFinal 输出 v/van/vn，导致字典导入与查询编码不一致
-		//   v2 (当前): 'ü':'y' — 与 'v':'y' 一致，字典 ü4 与查询 v4 均编码为 y4
-		const DICT_ENCODING_VERSION = '2';
+		//   v2: 'ü':'y' — 与 'v':'y' 一致，修复 ü 编码
+		//   v3 (当前): 新增 'van':'B' 映射（修复 üan 缺失编码），移除 legacyKeyMap 旧键扩展
+		const DICT_ENCODING_VERSION = '3';
 		const finalToCode = {
 			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
 			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
 			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
-			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y'
+			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y'
 		};
 
 		function encodeKey(key) {
@@ -221,10 +222,12 @@ const devLog = (...args) => {
 				const match = part.match(/^(.+)([0-4])$/);
 				if (match) {
 					const [_, final, tone] = match;
-					return (finalToCode[final] || final) + tone;
+					const code = finalToCode[final];
+					if (!code) return null;
+					return code + tone;
 				}
 				return part;
-			}).join('');
+			}).filter(Boolean).join('');
 		}
 
 		// 全局词库对象，用于快速内存查询
@@ -526,12 +529,12 @@ const devLog = (...args) => {
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
-	// 将键统一转成 v 形式，并生成 v/u 双版本，兼容词典中可能用 u 表示 ü 的情况
+	// 将键统一转成 v 形式。v 与 ü 在 finalToCode 中均映射为 'y'，
+	// 不再生成 u 变体（u→'x' 与 ü→'y' 编码不同，会产生无效查询键）
 	const buildKeyVariants = (key) => {
 		const base = String(key).replace(/ü/g, 'v').replace(/u:/g, 'v');
-			const variants = new Set([base, base.replace(/v/g, 'u')]);
-			return Array.from(variants);
-		};
+		return [base];
+	};
 
 		const extractTone = (p) => {
 			const m = p.match(/(\d)/);
@@ -726,28 +729,15 @@ const devLog = (...args) => {
 			return 0;
 		};
 
-		// 兼容旧字典键值的扩展映射
-		const legacyKeyMap = {
-			'i-flat': ['i'],
-			'i-retro': ['i'],
-			'i': [
-				'i', 
-				'z-retroflex', 'c-retroflex', 's-retroflex',
-				'zh-retroflex-e', 'ch-retroflex-e', 'sh-retroflex-e', 'r-retroflex-e',
-				'j-palatal', 'q-palatal', 'x-palatal'
-			],
-			'u': [
-				'u',
-				// 旧代码把 zu, cu, su 也归为 retroflex，所以也要查这些
-				'z-retroflex', 'c-retroflex', 's-retroflex',
-				'zh-retroflex-e', 'ch-retroflex-e', 'sh-retroflex-e', 'r-retroflex-e'
-			]
-		};
+		// legacyKeyMap 已在 v2/v3 编码迁移中废弃，v1 旧键不再存在于数据库中
 
 		// 从字典查询拼音组合对应的词组（新算法）
 		// 使用最后两个字的韵脚为查询条件，返回所有相关匹配
 		const queryDict = async (infos, looseness, onIncrementalUpdate = null, searchId = 0) => {
 			if (!infos || infos.length === 0) return null;
+
+			// 降级查询缓存：避免对同一 infos 集重复执行昂贵的数据库查询
+			if (!queryDict._degradeCache) queryDict._degradeCache = new Map();
 
 			const emit = (res, isFinal = false) => {
 				// 核心：如果当前的 searchId 已经不是全局最新的，说明任务已过时，直接中断
@@ -784,8 +774,8 @@ const devLog = (...args) => {
 			// 生成所有可能的查询键变体
 			const generateQueryKeys = (infos) => {
 				const keys = [];
-				const MAX_COMBINATIONS = 500; // 限制最大组合数防止由于 Tier 2 导致的浏览器假死
-				
+				const MAX_COMBINATIONS = 2000;
+
 				const recurse = (index, current) => {
 					if (keys.length >= MAX_COMBINATIONS) return;
 					if (index === infos.length) {
@@ -796,20 +786,11 @@ const devLog = (...args) => {
 					// Tier 2: 所有字都允许声调放宽（因为只处理最后两个字，组合数可控）
 					// Tier 0/1: 必须严格匹配声调
 					const toneVariants = allowToneRelax ? [1,2,3,4] : [info.tone];
-					
-					// 获取该韵母的所有变体
-					const finVariants = buildFinalVariants(info.fin, tier);
-					
-					// 扩展为旧字典的键值
-					const expandedVariants = new Set();
-					for (const v of finVariants) {
-						expandedVariants.add(v);
-						if (legacyKeyMap[v]) {
-							legacyKeyMap[v].forEach(k => expandedVariants.add(k));
-						}
-					}
 
-					for (const fin of expandedVariants) {
+					// 获取该韵母的所有变体（无需 legacyKeyMap 扩展，v1 旧键已迁移）
+					const finVariants = buildFinalVariants(info.fin, tier);
+
+					for (const fin of finVariants) {
 						for (const tone of toneVariants) {
 							const keyPart = `${fin}${tone}`;
 							recurse(index + 1, [...current, keyPart]);
@@ -865,7 +846,7 @@ const devLog = (...args) => {
 					const arr = Array.from(matchedByWordCount[len]);
 					if (l === sourceLength) res.sameLength.push(...arr);
 					else if (l > sourceLength) res.moreLengths.push(...arr);
-					else if (l === sourceLength - 1) res.lessLength.push(...arr);
+					else if (l < sourceLength) res.lessLength.push(...arr);
 				});
 				return res;
 			};
@@ -960,10 +941,10 @@ const devLog = (...args) => {
 			sameLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		
-		// 收集少一字的匹配
-		const targetLess = sourceLength - 1;
-		if (targetLess >= 1 && matchedByWordCount[targetLess]) {
-			lessLengthResults.push(...Array.from(matchedByWordCount[targetLess]));
+		// 收集所有短于输入的匹配
+		const lessLengthCandidates = sortedLengths.filter(len => len < sourceLength);
+		for (const len of lessLengthCandidates) {
+			lessLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		
 		// 如果没有相同字数的匹配，且源字数大于2，尝试降级查询
@@ -975,7 +956,14 @@ const devLog = (...args) => {
 				// 取末尾 currentLength 个字重新查询
 				console.log(`[Debug] Degrading to ${currentLength} chars...`);
 				const shorterInfos = infos.slice(-currentLength);
-				const shorterResult = await queryDict(shorterInfos, looseness);
+				const cacheKey = shorterInfos.map(i => `${i.fin}${i.tone}`).join('_') + '_' + looseness;
+				let shorterResult;
+				if (queryDict._degradeCache.has(cacheKey)) {
+					shorterResult = queryDict._degradeCache.get(cacheKey);
+				} else {
+					shorterResult = await queryDict(shorterInfos, looseness);
+					queryDict._degradeCache.set(cacheKey, shorterResult);
+				}
 				
 				if (shorterResult && shorterResult.sameLength && shorterResult.sameLength.length > 0) {
 					console.log(`[Debug] Degraded query found results!`);
@@ -1024,6 +1012,8 @@ const devLog = (...args) => {
 			moreLengthResults.push(...Array.from(matchedByWordCount[len]));
 		}
 		console.log(`queryDict结果: sameLength=${sameLengthResults.length}, moreLengths=${moreLengthResults.length}, sourceLength=${sourceLength}`);
+
+		queryDict._degradeCache.clear();
 		
 		return {
 			sameLength: sameLengthResults.length > 0 ? sameLengthResults : [],
