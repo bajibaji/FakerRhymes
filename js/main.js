@@ -1031,22 +1031,9 @@ const devLog = (...args) => {
 			// Tier 0: 严格模式，完全匹配
 			if (tier === 0) return [fin];
 
-			// Tier 1 & 2: 宽松模式 (合并平翘舌，合并前后鼻音)
-			
-			// 1. 前后鼻音合并：言前(an) + 江阳(ang)
-			const groupAnAng = ['an', 'ian', 'uan', 'van', 'ang', 'iang', 'uang'];
-			if (groupAnAng.includes(fin)) return groupAnAng;
-
-			// 2. 前后鼻音合并：
-			// 人辰-深(en/un) + 中东-eng(eng/ong) -> 实际上 en 和 eng 押韵更近
-			const groupEnEng = ['en', 'un', 'eng', 'ong', 'iong'];
-			if (groupEnEng.includes(fin)) return groupEnEng;
-
-			// 人辰-亲(in/vn) + 中东-ing(ing) -> 实际上 in 和 ing 押韵更近
-			const groupInIng = ['in', 'vn', 'ing'];
-			if (groupInIng.includes(fin)) return groupInIng;
-
-			// 3. 其他情况（包括 i-flat/i-retro 归为一七辙），使用十三辙
+			// Tier 1 & 2: 以十三辙为单位放宽韵母匹配
+			// 十三辙是传统中文押韵体系，辙内韵母相互押韵
+			// 不使用前后鼻音合并（如 an+ang、en+eng），因为它们在标准押韵中不通押
 			const track = thirteenTracks.find(t => t.finals.includes(fin));
 			return track ? track.finals : [fin];
 		};
