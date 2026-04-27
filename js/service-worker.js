@@ -5,6 +5,19 @@ console.log('Debug: Service Worker initializing. Imported APP_VERSION =', typeof
 const CACHE_NAME = 'fakerhymes-cache-' + APP_VERSION;
 console.log('Debug: Service Worker CACHE_NAME =', CACHE_NAME);
 const ASSETS = [
+  '/index.html',
+  '/custom.html',
+  '/css/style.css',
+  '/js/data.js',
+  '/js/db.js',
+  '/js/main.js',
+  '/js/version.js',
+  '/js/animations.js',
+  '/js/help-modal.js',
+  '/js/performance-test.js',
+  '/js/sw-init.js',
+  '/manifest.json',
+  '/icon.svg',
   '../dict_part_1.json',
   '../dict_part_2.json',
   '../dict_part_3.json',
@@ -35,7 +48,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // 只缓存词典和 WASM 文件
   const isDictFile = url.pathname.endsWith('/dict_part_1.json') ||
                      url.pathname.endsWith('/dict_part_2.json') ||
                      url.pathname.endsWith('/dict_part_3.json');
@@ -43,12 +55,11 @@ self.addEventListener('fetch', (event) => {
                      url.pathname.includes('sql-wasm.wasm');
 
   if (isDictFile || isWasmFile) {
-    // 缓存优先 + 后台更新
+    // 大文件：缓存优先 + 后台更新
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request);
         if (cached) {
-          // 后台更新缓存（失败则继续用旧缓存）
           event.waitUntil(
             fetch(request)
               .then((response) => {
@@ -71,6 +82,33 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 其他文件：不缓存，直接走网络
-  // 不调用 event.respondWith()，让浏览器直接请求
+  // 应用文件（HTML/CSS/JS）：网络优先，离线时回退缓存
+  const isAppFile = url.pathname.endsWith('.html') ||
+                    url.pathname.endsWith('.css') ||
+                    url.pathname.endsWith('.js') ||
+                    url.pathname === '/' ||
+                    url.pathname.endsWith('/manifest.json') ||
+                    url.pathname.endsWith('/icon.svg') ||
+                    url.pathname.endsWith('/index.html') ||
+                    url.pathname.endsWith('/custom.html');
+
+  if (isAppFile) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        try {
+          const response = await fetch(request);
+          if (response && response.ok) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        } catch (e) {
+          const cached = await cache.match(request);
+          return cached || new Response('Offline', { status: 503 });
+        }
+      })
+    );
+    return;
+  }
+
+  // 其他文件：不拦截，由浏览器直接处理
 });

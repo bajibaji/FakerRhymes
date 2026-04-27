@@ -160,7 +160,7 @@
       const text = document.getElementById('input').value;
       const parts = parseInput(text);
       if (!parts.length) {
-        showToast('请输入至少一个词/字');
+        status('请输入至少一个词/字');
         return;
       }
       saveList(parts.concat(loadList()));
@@ -239,18 +239,8 @@
       safeInit();
     }
     window.addEventListener('load', safeInit);
-    
-    // 每隔1秒检查并渲染一次，确保异步加载的数据能显示
-    setInterval(() => {
-        // 只有当列表确实发生变化时才重新渲染，避免影响滚动
-        const list = loadList();
-        const currentPills = document.querySelectorAll('.pill').length;
-        if (list.length !== currentPills) {
-            renderList();
-        }
-    }, 1000);
   </script>
-  <script src="data.js" defer></script>
+  <script src="./js/data.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script>
     // GSAP Animations

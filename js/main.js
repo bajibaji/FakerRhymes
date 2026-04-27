@@ -596,7 +596,7 @@ const devLog = (...args) => {
 				pattern: 'pinyin'
 			})[0];
 
-			if (!raw || /[a-z]/i.test(raw) === false) return null;
+			if (!raw || !/^[a-z]+[1-4]$/i.test(String(raw))) return null;
 
 			const clean = normalize(raw);
 			const tone = extractTone(raw);
@@ -754,10 +754,10 @@ const devLog = (...args) => {
 				return true;
 			};
 			
-			// 1. 核心极速逻辑：如果 Bloom Filter 还没准备好，尝试触发懒加载
+			// 1. 核心极速逻辑：如果词库还没准备好，触发懒加载并等待完成
 			if (!window.dictLoaded && !window.isDictLoading) {
 				console.log('触发词库自动挂载...');
-				loadDict();
+				await loadDict();
 			}
 
 			// 修改：不再强制只取最后两个字，而是根据输入长度决定
