@@ -1140,12 +1140,21 @@ const devLog = (...args) => {
 
 		const getGeminiBaseUrl = (proxy) => {
 			if (!proxy) return 'https://generativelanguage.googleapis.com';
-			return proxy.replace(/\/$/, '');
+			const normalized = proxy.trim().replace(/\/$/, '');
+			const url = new URL(normalized);
+			const isLocalHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+			if (url.protocol !== 'https:' && !isLocalHttp) {
+				throw new Error('代理地址必须使用 HTTPS（本机 localhost 除外），避免 API Key 明文泄露');
+			}
+			if (url.username || url.password) {
+				throw new Error('代理地址不能包含用户名或密码');
+			}
+			return normalized;
 		};
 
 		const requestGemini = async (prompt, apiKey, proxy) => {
 			const baseUrl = getGeminiBaseUrl(proxy);
-			const response = await fetch(`${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+			const response = await fetch(`${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -2036,7 +2045,13 @@ const devLog = (...args) => {
 				btn.type = 'button';
 				btn.className = 'history-item';
 				btn.title = '点击快速查询';
-				btn.innerHTML = `<span class="history-index">${index + 1}.</span><span class="history-text">${item}</span>`;
+				const indexSpan = document.createElement('span');
+				indexSpan.className = 'history-index';
+				indexSpan.textContent = `${index + 1}.`;
+				const textSpan = document.createElement('span');
+				textSpan.className = 'history-text';
+				textSpan.textContent = item;
+				btn.append(indexSpan, textSpan);
 				btn.addEventListener('click', () => {
 					sourceInput.value = item;
 					sourceInput.blur();

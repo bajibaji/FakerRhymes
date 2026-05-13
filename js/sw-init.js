@@ -1,7 +1,7 @@
 // 在本地开发环境（localhost/127.0.0.1）不注册 Service Worker，避免干扰 Live Preview
 		if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
 			window.addEventListener('load', () => {
-				navigator.serviceWorker.register('./js/service-worker.js', {
+				navigator.serviceWorker.register('./service-worker.js', {
 					updateViaCache: 'none' // 强制每次都从网络获取 SW 及其 importScripts，不走 HTTP 缓存
 				}).then((reg) => {
 					// 每次页面加载时主动检查 SW 是否有更新

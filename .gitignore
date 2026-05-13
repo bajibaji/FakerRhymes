@@ -1,5 +1,6 @@
 node_modules/*
 dist/*
+.playwright-mcp/
 /plans
 .agents/skills/ui-ux-pro-max/SKILL.md
 .agents/skills/ui-styling/SKILL.md
