@@ -193,24 +193,42 @@
       }
       // 用换行分隔导出
       const exportText = list.join('\n');
-      navigator.clipboard.writeText(exportText).then(() => {
-        box.style.display = 'block';
-        box.textContent = '已复制到剪切板：' + list.join('、');
-        alert('已导出 ' + list.length + ' 个词到剪切板');
-      });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(exportText).then(() => {
+          box.style.display = 'block';
+          box.textContent = '已复制到剪切板：' + list.join('、');
+          alert('已导出 ' + list.length + ' 个词到剪切板');
+        }).catch(err => {
+          fallbackExport(exportText, box);
+        });
+      } else {
+        fallbackExport(exportText, box);
+      }
+    }
+
+    function fallbackExport(text, box) {
+      box.style.display = 'block';
+      box.textContent = '无法自动访问剪切板，请手动复制以下内容：\n\n' + text;
+      alert('无法自动写入剪切板，请手动复制下方区域文本。');
     }
 
     function handleImport() {
       const inputBox = document.getElementById('input');
-      navigator.clipboard.readText().then(clipText => {
-        if (clipText && clipText.trim()) {
-          inputBox.value = clipText;
-          inputBox.focus();
-          alert('已粘贴到输入框，点击"保存到浏览器"确认');
-        } else {
-          alert('剪切板为空');
-        }
-      });
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(clipText => {
+          if (clipText && clipText.trim()) {
+            inputBox.value = clipText;
+            inputBox.focus();
+            alert('已粘贴到输入框，点击"保存到浏览器"确认');
+          } else {
+            alert('剪切板为空');
+          }
+        }).catch(err => {
+          alert('读取剪切板失败，请手动将词语复制并粘贴到输入框。');
+        });
+      } else {
+        alert('当前浏览器环境不支持读取剪切板，请手动粘贴词语到输入框。');
+      }
     }
 
     const init = () => {

@@ -138,6 +138,7 @@ const devLog = (...args) => {
 		};
 
 		const hasChineseChars = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
+		const isOnlyChinese = (text) => /^[\u4e00-\u9fa5]+$/.test(String(text || ''));
 
 		// IndexedDB helpers
 		const DB_NAME = 'FakerRhymesDB';
@@ -1356,11 +1357,11 @@ const devLog = (...args) => {
 			return;
 		}
 
-		// 仅支持中文输入（本项目为中文韵脚查询）
-		if (!hasChineseChars(src)) {
+		// 仅支持纯中文输入（本项目为中文韵脚查询）
+		if (!isOnlyChinese(src)) {
 			setGenerateButtonsLoading(false);
 			clearSlowQueryFeedback();
-			render([], '<i class="ri-alert-fill" style="color:#f59e0b; margin-right:4px;"></i> 仅支持中文词语查询，请输入中文。', null, '');
+			render([], '<i class="ri-alert-fill" style="color:#f59e0b; margin-right:4px;"></i> 仅支持纯中文词语查询，请勿包含字母、数字、空格或标点符号。', null, '');
 			return;
 		}
 		addToHistory(src);
