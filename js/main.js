@@ -213,7 +213,7 @@ const devLog = (...args) => {
 			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
 			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
 			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
-			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y'
+			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y', 've': 'q'
 		};
 
 		function encodeKey(key) {
@@ -596,7 +596,7 @@ const devLog = (...args) => {
 				pattern: 'pinyin'
 			})[0];
 
-			if (!raw || !/^[a-z]+[1-4]$/i.test(String(raw))) return null;
+			if (!raw || !/^[a-z]+[0-4]?$/i.test(String(raw))) return null;
 
 			const clean = normalize(raw);
 			const tone = extractTone(raw);
@@ -651,7 +651,7 @@ const devLog = (...args) => {
 				const clean = normalize(raw);
 				const tone = extractTone(raw);
 				const parts = detectFinal(clean);
-				if (!parts || !tone) return;
+				if (!parts) return;
 				candidates.push({
 					raw,
 					tone,
@@ -695,7 +695,7 @@ const devLog = (...args) => {
 		const thirteenTracks = [
 			{ name: '发花辙', finals: ['a', 'ia', 'ua'] },
 			{ name: '梭波辙', finals: ['o', 'e', 'uo'] },
-			{ name: '乜斜辙', finals: ['ie', 've'] },
+			{ name: '乜斜辙', finals: ['ie', 'ue', 've'] },
 			{ name: '言前辙', finals: ['an', 'ian', 'uan', 'van'] },
 			{ name: '人辰辙-深', finals: ['en', 'un'] },
 			{ name: '人辰辙-亲', finals: ['in', 'vn'] },
