@@ -1623,8 +1623,11 @@ const devLog = (...args) => {
 					const span = document.createElement('span');
 					span.textContent = item.phrase;
 					
-					// 设置不同等级的颜色 (更亮、更高对比度的配色方案)
-					if (item.tier === 0) {
+					// 设置不同等级的颜色 (更亮、更高对比度的配色方案，自定义词用草绿色标识)
+					if (customSet.has(item.phrase)) {
+						span.style.color = '#4ade80'; // 自定义词：草绿色
+						span.title = '自定义词库词汇';
+					} else if (item.tier === 0) {
 						span.style.color = '#d7c4ff'; // 严格：亮紫色
 						span.title = '严格匹配 (同韵同调)';
 					} else if (item.tier === 1) {
@@ -1733,6 +1736,13 @@ const devLog = (...args) => {
 						div.className = 'match-item';
 						div.textContent = phrase;
 						div.dataset.length = phrase.length;
+						
+						if (customSet.has(phrase)) {
+							div.style.color = '#4ade80'; // 自定义词：草绿色
+							div.style.borderColor = 'rgba(74, 222, 128, 0.4)';
+							div.style.background = 'rgba(74, 222, 128, 0.08)';
+							div.title = '自定义词库词汇';
+						}
 						div.addEventListener('click', () => {
 							document.getElementById('source').value = phrase;
 							process();
