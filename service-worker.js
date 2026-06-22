@@ -1,4 +1,4 @@
-// Version: v2.3.9
+// Version: v2.3.10
 importScripts('./js/version.js');
 
 const CACHE_VERSION = typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'dev';

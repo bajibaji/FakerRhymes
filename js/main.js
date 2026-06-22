@@ -1728,7 +1728,7 @@ const devLog = (...args) => {
 				const displayMatches = uniqueTailMatches.slice(0, 200);
 
 				displayMatches.forEach(phrase => {
-					if (phrase && phrase !== userInput) {
+					if (phrase && !phrase.includes(userInput)) {
 						const div = document.createElement('div');
 						div.className = 'match-item';
 						div.textContent = phrase;
