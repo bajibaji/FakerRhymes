@@ -1,3 +1,29 @@
+		// Final to short code mapping
+		// 编码版本历史:
+		//   v2: 'ü':'y' — 与 'v':'y' 一致，修复 ü 编码
+		//   v3 (当前): 新增 'van':'B' 映射（修复 üan 缺失编码），移除 legacyKeyMap 旧键扩展
+		const DICT_ENCODING_VERSION = '3';
+		const finalToCode = {
+			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
+			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
+			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
+			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y'
+		};
+
+		function encodeKey(key) {
+			if (!key) return '';
+			return key.split('_').map(part => {
+				const match = part.match(/^(.+)([0-4])$/);
+				if (match) {
+					const [_, final, tone] = match;
+					const code = finalToCode[final];
+					if (!code) return null;
+					return code + tone;
+				}
+				return part;
+			}).filter(Boolean).join('');
+		}
+
 const devLog = (...args) => {
 			console.log('[Dev]', ...args);
 		};
@@ -48,6 +74,15 @@ const devLog = (...args) => {
 			if (!el) return;
 			el.textContent = msg || '';
 			el.dataset.type = type;
+			
+			// 流式加载、导入或错误时红色加粗显示（用 setProperty important 防 CSS 覆盖）
+			if (msg && (msg.includes('正在') || msg.includes('载入') || msg.includes('导入') || type === 'error')) {
+				el.style.setProperty('color', '#ef4444', 'important');
+				el.style.setProperty('font-weight', 'bold', 'important');
+			} else {
+				el.style.setProperty('color', '', '');
+				el.style.setProperty('font-weight', '', '');
+			}
 		};
 
 		// 屏幕顶部细进度条
@@ -140,393 +175,157 @@ const devLog = (...args) => {
 		const hasChineseChars = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
 		const isOnlyChinese = (text) => /^[\u4e00-\u9fa5]+$/.test(String(text || ''));
 
-		// IndexedDB helpers
-		const DB_NAME = 'FakerRhymesDB';
-		const DB_VERSION = 1;
-		const STORE_NAME = 'dictionary';
+		let globalDictText = '';
 
-		function openDB() {
-			return new Promise((resolve, reject) => {
-				const request = indexedDB.open(DB_NAME, DB_VERSION);
-				request.onupgradeneeded = (e) => {
-					const db = e.target.result;
-					if (!db.objectStoreNames.contains(STORE_NAME)) {
-						db.createObjectStore(STORE_NAME);
-					}
-				};
-				request.onsuccess = (e) => resolve(e.target.result);
-				request.onerror = (e) => reject(e.target.error);
-			});
-		}
-
-		async function getAllKeysFromDB() {
-			const db = await openDB();
-			return new Promise((resolve, reject) => {
-				const transaction = db.transaction([STORE_NAME], 'readonly');
-				const store = transaction.objectStore(STORE_NAME);
-				const request = store.getAllKeys();
-				request.onsuccess = (e) => resolve(e.target.result);
-				request.onerror = (e) => reject(e.target.error);
-			});
-		}
-
-		// 平仄过滤函数：根据尾字声调过滤词语列表
-		// pingze: 'all' | 'ping' | 'ze'
-		// 平声 = 1, 2声调；仄声 = 3, 4声调
-		const filterByPingZe = (phrases, pingze) => {
-			if (!pingze || pingze === 'all' || !Array.isArray(phrases)) {
-				return phrases;
-			}
-			
-			return phrases.filter(phrase => {
-				if (!phrase || phrase.length === 0) return false;
-				
-				// 获取尾字
-				const chars = Array.from(phrase);
-				const lastChar = chars[chars.length - 1];
-				const lastInfo = toInfo(lastChar);
-				
-				if (!lastInfo || !lastInfo.tone || lastInfo.tone === '-') {
-					return false; // 无法确定声调的词语排除
-				}
-				
-				const tone = Number(lastInfo.tone);
-				
-				if (pingze === 'ping') {
-					// 平声：1、2声
-					return tone === 1 || tone === 2;
-				} else if (pingze === 'ze') {
-					// 仄声：3、4声
-					return tone === 3 || tone === 4;
-				}
-				
-				return true;
-			});
-		};
-
-		// Final to short code mapping
-		// 编码版本历史:
-		//   v1 (隐含): 'ü':'B', 'üan':'C', 'ün':'D' — 但 detectFinal 输出 v/van/vn，导致字典导入与查询编码不一致
-		//   v2: 'ü':'y' — 与 'v':'y' 一致，修复 ü 编码
-		//   v3 (当前): 新增 'van':'B' 映射（修复 üan 缺失编码），移除 legacyKeyMap 旧键扩展
-		const DICT_ENCODING_VERSION = '3';
-		const finalToCode = {
-			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
-			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
-			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
-			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y', 've': 'q'
-		};
-
-		function encodeKey(key) {
-			if (!key) return key;
-			return key.split('_').map(part => {
-				const match = part.match(/^(.+)([0-4])$/);
-				if (match) {
-					const [_, final, tone] = match;
-					const code = finalToCode[final];
-					if (!code) return null;
-					return code + tone;
-				}
-				return part;
-			}).filter(Boolean).join('');
-		}
-
-		// 全局词库对象，用于快速内存查询
-		let globalDictData = null;
-
-		// 加载优化字典（拆分为3个文件）
 		const loadDict = async () => {
 			if (window.isDictLoading) return;
 			window.isDictLoading = true;
-			setDictLoadStatus('正在准备词库...');
-			setTopProgress(0);
+			setDictLoadStatus('正在极速载入词库...');
+			setTopProgress(10);
 
-			const btn = document.getElementById('loadDictBtn');
-			const originalBtnText = btn ? btn.innerHTML : '📚 加载词库';
-			
+			const btn = document.getElementById('go');
 			if (btn) {
 				btn.disabled = true;
-				btn.innerHTML = '<i class="ri-loader-4-line"></i> 准备中...';
+				btn.innerHTML = '<i class="ri-loader-4-line"></i> 载入中...';
 			}
 
 			try {
-				// 尝试初始化数据库，如果已存在则不需要加载 JSON
-				try {
-					const db = await window.dbManager.init();
-
-					// 编码版本迁移：检测 DICT_ENCODING_VERSION 变化，不一致时清空旧库强制重导
-					// v1 从未保存版本号，因此 storedVersion 为 null 时也需要迁移（若有旧数据）
-					const storedVersion = localStorage.getItem('DICT_ENCODING_VERSION');
-					const needMigration = storedVersion !== DICT_ENCODING_VERSION;
-					if (needMigration && await window.dbManager.checkDataExists()) {
-						devLog(`字典编码版本变更 (v${storedVersion || '1'} → v${DICT_ENCODING_VERSION})，清空旧数据重新导入...`);
-						setDictLoadStatus('检测到词库编码更新，正在重建...');
-						window.dbManager.reset();
-						try {
-							await new Promise((resolve, reject) => {
-								const deleteReq = indexedDB.deleteDatabase('RhymeSQLiteDB');
-								deleteReq.onsuccess = resolve;
-								deleteReq.onerror = reject;
-								deleteReq.onblocked = resolve;
-							});
-						} catch(e) { console.warn('删除旧 IndexedDB 失败:', e); }
-						await window.dbManager.init();
-						devLog('旧数据库已清空，准备重新导入');
-					}
-
-					if (await window.dbManager.checkDataExists()) {
-						devLog('SQLite 数据库已准备就绪，跳过 JSON 加载');
-						window.dictLoaded = true;
-						window.isDictLoading = false;
-						localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
-						localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
-						localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
-						localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
-						setDictLoadStatus('词库已就绪，可离线使用。', 'success');
-						setTopProgress(100);
-						setTimeout(() => {
-							const bar = document.getElementById('topProgressBar');
-							if (bar) bar.classList.add('complete');
-						}, 800);
-						
-						if (btn) btn.style.display = 'none';
-						
-						const warning = document.getElementById('dictWarning');
-						if (warning) {
-							warning.innerHTML = '<i class="ri-checkbox-circle-fill" style="margin-right:2px;"></i> 词库已就绪 (SQLite)';
-							warning.style.color = '#10b981';
-							warning.style.display = 'block';
-						}
-						return;
-					}
-				} catch (e) {
-					console.warn('SQLite 初始化检查失败，回退到 JSON 加载:', e);
-				}
-
-				// 极致优化：不再写入 IndexedDB（写入太慢），直接将整个 JSON 载入内存
-				// 拆分成3个文件以提升加载性能
-				
 				const startTime = performance.now();
 
-				const files = [
-					{ url: './dict_part_1.json', size: 13297393 },
-					{ url: './dict_part_2.json', size: 14388764 },
-					{ url: './dict_part_3.json', size: 12302875 }
-				];
-				
-				const totalSize = files.reduce((acc, f) => acc + f.size, 0);
-				let loadedSize = 0;
-				const progressMap = new Array(files.length).fill(0);
-
-				const updateProgress = () => {
-					if (!btn) return;
-					const currentLoaded = progressMap.reduce((acc, val) => acc + val, 0);
-					const percent = Math.min(99, Math.round((currentLoaded / totalSize) * 100));
-					btn.innerHTML = `<i class="ri-loader-4-line"></i> 载入中 ${percent}%`;
-				};
-
-				const fetchWithProgress = async (url, index) => {
-					const response = await fetch(url);
-					if (!response.ok) throw new Error(`加载失败: ${url}`);
-					
-					const reader = response.body.getReader();
-					const contentLength = +response.headers.get('Content-Length') || files[index].size;
-					
-					// 如果服务器返回了 Content-Length，可以用它来校准
-					if (contentLength && contentLength !== files[index].size) {
-						// 动态调整 (这里简单处理，尽量依赖预设值)
-					}
-
-					const chunks = [];
-					let receivedLength = 0;
-
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-						chunks.push(value);
-						receivedLength += value.length;
-						progressMap[index] = receivedLength;
-						updateProgress();
-					}
-
-					const blob = new Blob(chunks);
-					const text = await blob.text();
-					return JSON.parse(text);
-				};
-				
-				const fetchAndParse = async (fileInfo, index) => {
-					const response = await fetch(fileInfo.url);
-					if (!response.ok) throw new Error(`加载失败: ${fileInfo.url}`);
-					
-					const contentLength = +response.headers.get('Content-Length') || fileInfo.size;
-					const reader = response.body.getReader();
-					
-					let receivedLength = 0;
-					const chunks = [];
-					
-					while(true) {
-						const {done, value} = await reader.read();
-						if (done) break;
-						chunks.push(value);
-						receivedLength += value.length;
-						progressMap[index] = receivedLength;
-						
-						// 更新总进度
-						const currentLoaded = progressMap.reduce((acc, val) => acc + val, 0);
-						const percent = Math.min(99, Math.round((currentLoaded / totalSize) * 100));
-						if (btn) btn.innerHTML = `<i class="ri-loader-4-line"></i> 载入中 ${percent}%`;
-						setDictLoadStatus(`下载词库中 ${percent}%`);
-						setTopProgress(percent * 0.45);
-					}
-					
-					const blob = new Blob(chunks);
-					const text = await blob.text();
-					return JSON.parse(text);
-				};
-				
-				// 并行加载3个拆分文件
-				const datasets = await Promise.all([
-					fetchAndParse(files[0], 0),
-					fetchAndParse(files[1], 1),
-					fetchAndParse(files[2], 2)
-				]);
-				
-				if (btn) btn.innerHTML = '<i class="ri-loader-4-line"></i> 解析中...';
-				setDictLoadStatus('词库下载完成，正在解析...');
-				setTopProgress(48);
-
-				// 初始化 SQLite 数据库
-				const db = await window.dbManager.init();
-				
-				// 检查是否需要导入数据
-				if (!(await window.dbManager.checkDataExists())) {
-					devLog('开始导入数据到 SQLite...');
-					
-					let batchData = [];
-					let processedCount = 0;
-					const CHUNK_SIZE = 2000; // 降低批处理大小 (10k -> 2k)，防止长时间占用主线程
-					
-					for (let i = 0; i < datasets.length; i++) {
-						const dataset = datasets[i];
-						if (!dataset) continue;
-						
-						const keys = Object.keys(dataset);
-						
-						for (let j = 0; j < keys.length; j++) {
-							const key = keys[j];
-							const encoded = encodeKey(key);
-							const suffix = encoded.length >= 2 ? encoded.slice(-2) : '';
-							
-							if (Array.isArray(dataset[key])) {
-								for (const phrase of dataset[key]) {
-									batchData.push({
-										phrase: phrase,
-										length: phrase.length,
-										encoded_key: encoded,
-										suffix_2: suffix
-									});
-								}
-							}
-							
-							// 分批插入，避免阻塞主线程
-							if (batchData.length >= CHUNK_SIZE) {
-								await window.dbManager.insertChunk(batchData);
-								processedCount += batchData.length;
-								batchData = [];
-								
-								// 每次 chunk 插入后都更新 UI 并让出主线程，不再跳过
-								const importPercent = (i * 33 + (j / keys.length) * 33).toFixed(0);
-								if (btn) btn.innerHTML = `<i class="ri-database-2-line"></i> 导入中 ${importPercent}%...`;
-								setDictLoadStatus(`写入本地数据库中 ${importPercent}%`);
-								setTopProgress(50 + Number(importPercent) * 0.40);
-								
-								// 增加延时 (0ms -> 5ms)，确保浏览器有足够时间渲染帧
-								await new Promise(resolve => setTimeout(resolve, 5));
-							}
-						}
-						
-						// 显式释放内存
-						datasets[i] = null;
-					}
-					
-					// 插入剩余数据
-					if (batchData.length > 0) {
-						await window.dbManager.insertChunk(batchData);
-						processedCount += batchData.length;
-					}
-					
-					// 显式保存到 IndexedDB
-					if (btn) btn.innerHTML = '<i class="ri-save-3-line"></i> 正在写入硬盘...';
-					setDictLoadStatus('正在写入浏览器本地存储...');
-					setTopProgress(93);
-					await new Promise(resolve => setTimeout(resolve, 50)); 
-					
-					// 强制在下一次事件循环中执行 save，防止卡死当前渲染帧
-					await new Promise(async (resolve) => {
-						try {
-							await window.dbManager.save();
-						} catch(e) { console.error(e); }
-						resolve();
-					});
-					
-					devLog(`已导入 ${processedCount} 条数据到 SQLite`);
-				} else {
-					devLog('SQLite 数据库已存在数据，跳过导入');
+				// 检测字典版本更新
+				const storedVersion = localStorage.getItem('DICT_ENCODING_VERSION');
+				if (storedVersion !== DICT_ENCODING_VERSION) {
+					devLog(`字典版本变动 (v${storedVersion || '1'} → v${DICT_ENCODING_VERSION})`);
 				}
+
+				setTopProgress(40);
 				
+				// 极速加载纯文本字典
+				const fetchUrl = new URL('dict.txt', window.location.href).href;
+				const response = await fetch(fetchUrl);
+				if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+				
+				setTopProgress(80);
+				globalDictText = await response.text();
+
 				window.dictLoaded = true;
 				window.isDictLoading = false;
 				localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
 				localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
-				localStorage.setItem('ONLINE_DICT_SOURCE', 'SQLite 本地词库');
+				localStorage.setItem('ONLINE_DICT_SOURCE', '本地极速文本词库');
 				localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
-				setDictLoadStatus('词库加载完成，后续可离线使用。', 'success');
-				devLog('词库就绪耗时:', (performance.now() - startTime).toFixed(2), 'ms');
+				
+				setDictLoadStatus('词库已就绪，可离线使用。', 'success');
+				devLog('纯文本词库就绪总耗时:', (performance.now() - startTime).toFixed(2), 'ms', '大小:', (globalDictText.length / 1024 / 1024).toFixed(2), 'MB');
 				setTopProgress(100);
+				
 				setTimeout(() => {
 					const bar = document.getElementById('topProgressBar');
 					if (bar) bar.classList.add('complete');
 				}, 800);
 				
-				// 更新 UI
-				if (btn) btn.style.display = 'none';
+				// 恢复按钮文本与状态
+				if (btn) {
+					btn.disabled = false;
+					btn.innerHTML = '生成押韵';
+					btn.style.background = '';
+					btn.classList.remove('error');
+				}
 				
+				// 自动更新本地状态
+				updateDictStatus();
+
 				const warning = document.getElementById('dictWarning');
 				if (warning) {
-					warning.innerHTML = '<i class="ri-checkbox-circle-fill" style="margin-right:2px;"></i> 词库已就绪 (SQLite)';
+					warning.innerHTML = '<i class="ri-checkbox-circle-fill" style="margin-right:2px;"></i> 词库已就绪 (内存直连)';
 					warning.style.color = '#10b981';
 					warning.style.display = 'block';
 				}
 
 			} catch (e) {
-				console.error('极速载入失败:', e);
+				console.error('纯文本词库载入失败:', e);
 				window.isDictLoading = false;
-				setDictLoadStatus(`词库加载失败：${e.message || '请重试'}`, 'error');
+				window.dictLoaded = false;
+
+				// 用户友好的错误信息
+				const errMsg = (e.message || '').toLowerCase();
+				let userMsg = '词库加载失败，请点击按钮重试。';
+				if (errMsg.includes('failed to fetch') || errMsg.includes('network')) {
+					userMsg = '网络连接失败，请检查网络后点击重试。';
+				} else if (errMsg.includes('quota') || errMsg.includes('storage') || errMsg.includes('memory')) {
+					userMsg = '设备内存不足，请清理后台应用后重试。';
+				}
+				userMsg += ` (详情: ${e.message || e})。若刚更新过代码，请按 Ctrl+F5 强制刷新页面以清除浏览器缓存。`;
+
+				setDictLoadStatus(userMsg, 'error');
 				setTopProgress(100);
 				setTimeout(() => {
 					const bar = document.getElementById('topProgressBar');
 					if (bar) bar.classList.add('error');
 				}, 100);
-				
+
 				if (btn) {
-					btn.innerHTML = '❌ 加载失败 (点击重试)';
-					btn.disabled = false; // 失败允许重试
-					btn.classList.add('error');
+					btn.innerHTML = '<i class="ri-restart-line"></i> 点击重试加载';
+					btn.disabled = false;
+					btn.style.background = 'linear-gradient(135deg, #ef4444, #f97316)';
+				}
+
+				const warning = document.getElementById('dictWarning');
+				if (warning) {
+					warning.innerHTML = '<i class="ri-error-warning-fill" style="margin-right:2px;"></i> 词库未就绪，点击按钮重试';
+					warning.style.color = '#ef4444';
+					warning.style.display = 'block';
 				}
 			}
 		};
 
-		// 极速获取数据函数 (兼容性保留，实际查询已迁移到 SQLite)
-		async function getFromDB(key) {
-			// 查询 SQLite
-			if (window.dbManager) {
-				const results = await window.dbManager.queryExact(key);
-				if (results && results.length > 0) {
-					return results.map(row => row.phrase);
+		const updateDictStatus = () => {
+			const cachedTime = localStorage.getItem('ONLINE_DICT_TIME');
+			const dictStatus = document.getElementById('dictStatus');
+			const dictStatusText = document.getElementById('dictStatusText');
+			const goBtn = document.getElementById('go');
+			
+			if (cachedTime) {
+				const count = localStorage.getItem('ONLINE_DICT_COUNT') || '7000+';
+				const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '核心词库';
+				const date = new Date(Number(cachedTime));
+				
+				if (goBtn) {
+					goBtn.innerHTML = '生成押韵';
+					goBtn.disabled = false;
 				}
+				window.dictLoaded = true;
+				
+				// loadDictBtn removed
+				dictStatus.style.display = 'block';
+				dictStatusText.textContent = `📖 词库：${count} 个汉字（${source}） | ${date.toLocaleString('zh-CN')}`;
+				setDictLoadStatus('检测到本地词库缓存，可直接使用。', 'success');
+			} else {
+				if (goBtn) {
+					goBtn.innerHTML = '<i class="ri-book-read-line"></i> 加载词库';
+					goBtn.disabled = false;
+				}
+				window.dictLoaded = false;
+				setDictLoadStatus('首次使用将自动加载词库，请稍候。');
 			}
-			return null;
-		}
+		};
+
+		const filterByPingZe = (phrases, type) => {
+			if (!phrases || !Array.isArray(phrases) || !type || type === 'all') return phrases;
+			return phrases.filter(phrase => {
+				if (!phrase) return false;
+				const lastChar = phrase.slice(-1);
+				const info = toInfo(lastChar);
+				if (!info || info.tone === '-') return false;
+				const tone = Number(info.tone);
+				if (type === 'ping') {
+					return tone === 1 || tone === 2;
+				} else if (type === 'ze') {
+					return tone === 3 || tone === 4;
+				}
+				return true;
+			});
+		};
 
 	const normalize = (p) => p.replace(/\d/g, '').replace(/ü/g, 'v').replace(/u:/g, 'v');
 
@@ -831,12 +630,17 @@ const devLog = (...args) => {
 				matchedByWordCount[phraseLen].add(phrase);
 			};
 	
-			// 1. 精确匹配（通过 SQLite IN 查询）- 这部分非常快
-			const BATCH_SIZE = 500; // 提升批次大小，减少 Worker 往返次数
-			for (let i = 0; i < variantKeys.length; i += BATCH_SIZE) {
-				const batch = variantKeys.slice(i, i + BATCH_SIZE);
-				const results = await window.dbManager.queryByKeys(batch);
-				for (const row of results) addMatch(row.phrase);
+			// 1. 精确匹配（通过纯文本正则提取）
+			if (globalDictText) {
+				for (const qk of variantKeys) {
+					const exactRegex = new RegExp(`(?:^|\\n)${qk}:([^\\n]+)`);
+					const match = globalDictText.match(exactRegex);
+					if (match && match[1]) {
+						match[1].split(',').forEach(phrase => {
+							addMatch(phrase);
+						});
+					}
+				}
 			}
 	
 			// 立即渲染第一批结果（精确匹配）
@@ -854,27 +658,37 @@ const devLog = (...args) => {
 			
 			emit(getCategorized());
 	
-			// 2. 后缀匹配（批量，单次 Worker 调用）
-			// 把所有变体 key 的后缀查询合并为一次 querySuffixBatch，消除 N+1 问题
-			if (queryVariantSet.size > 0) {
-				// 检查是否被中断
+			// 2. 后缀匹配（纯文本全局正则）
+			if (queryVariantSet.size > 0 && globalDictText) {
 				if (searchId !== currentSearchId) return null;
 	
-				const batchQueries = [];
+				const suffixes = [];
 				for (const qk of queryVariantSet) {
 					if (qk.length >= 2) {
-						batchQueries.push({
-							suffix2: qk.slice(-2),
-							minLength: sourceLength,
-							encodedKey: qk
-						});
+						suffixes.push(qk);
 					}
 				}
 	
-				if (batchQueries.length > 0) {
-					const results = await window.dbManager.querySuffixBatch(batchQueries, 500);
-					for (const row of results) addMatch(row.phrase);
-					devLog(`[Tier ${tier}] 后缀批量查询完成，结果数: ${results.length}`);
+				if (suffixes.length > 0) {
+					const pattern = suffixes.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+					// 匹配以 suffix 结尾的 key。行结构为: "key:words"
+					const regex = new RegExp(`(?:^|\\n)[^:\\n]*(?:${pattern}):([^\\n]+)`, 'g');
+					
+					let match;
+					let count = 0;
+					while ((match = regex.exec(globalDictText)) !== null) {
+						if (match[1]) {
+							const phrases = match[1].split(',');
+							for (const phrase of phrases) {
+								if (phrase.length > sourceLength) {
+									addMatch(phrase);
+								}
+							}
+						}
+						count++;
+						if (count > 2000) break; // 性能兜底，防止极端情况卡死
+					}
+					devLog(`[Tier ${tier}] 文本正则后缀匹配完成`);
 				}
 			}
 			
@@ -1030,7 +844,14 @@ const devLog = (...args) => {
 
 		const buildFinalVariants = (fin, tier) => {
 			// Tier 0: 严格模式，完全匹配
-			if (tier === 0) return [fin];
+			if (tier === 0) {
+				// 数据文件使用 plain i 编码，detectFinal 区分了 i-flat/i-retro
+				// 三个 i 变体在押韵上等价，必须互相匹配才能查到结果
+				if (fin === 'i-flat' || fin === 'i-retro' || fin === 'i') {
+					return ['i', 'i-flat', 'i-retro'];
+				}
+				return [fin];
+			}
 
 			// Tier 1 & 2: 以十三辙为单位放宽韵母匹配
 			// 十三辙是传统中文押韵体系，辙内韵母相互押韵
@@ -1065,7 +886,8 @@ const devLog = (...args) => {
 				let currentMatchTier = -1;
 				
 				// 1. 尝试严格匹配
-				if (src.fin === pInfo.fin && src.tone === pInfo.tone) {
+				// 修复：严格模式下也必须允许变体（如 i 和 i-retro 的互通），不能仅仅用 ===
+				if (src.tone === pInfo.tone && buildFinalVariants(src.fin, 0).includes(pInfo.fin)) {
 					currentMatchTier = 0;
 				} 
 				// 2. 尝试中等匹配 (同调，但韵母放宽)
@@ -1082,14 +904,6 @@ const devLog = (...args) => {
 				
 				maxTierFound = Math.max(maxTierFound, currentMatchTier);
 
-				// 声母类型过滤 (非平翘舌音不匹配平翘舌音)
-				// 对于更多匹配结果，放松这个限制以显示更多选项
-				const srcIsSpecial = specialInitials.includes(src.ini);
-				const matchIsSpecial = specialInitials.includes(pInfo.ini);
-				if (!srcIsSpecial && matchIsSpecial) {
-					// 只在严格模式下才严格过滤
-					if (tierLimit === 0) return -1;
-				}
 			}
 			return maxTierFound;
 		};
@@ -1450,8 +1264,17 @@ const devLog = (...args) => {
 					.map(phrase => ({ phrase, tier: getPhraseMatchTier(phrase, tempInfosWithOverrides, looseness) }))
 					.filter(item => item.tier !== -1 && !item.phrase.includes(userInput));
 				
-				// 按等级排序 (0 < 1 < 2)
-				matchesWithTier.sort((a, b) => a.tier - b.tier);
+				// 按等级排序 (0 < 1 < 2)，自定义词优先
+				const customStr = localStorage.getItem('CUSTOM_RHYME_BANK');
+				const customSet = new Set(customStr ? JSON.parse(customStr) : []);
+
+				matchesWithTier.sort((a, b) => {
+					const aIsCustom = customSet.has(a.phrase);
+					const bIsCustom = customSet.has(b.phrase);
+					if (aIsCustom && !bIsCustom) return -1;
+					if (!aIsCustom && bIsCustom) return 1;
+					return a.tier - b.tier;
+				});
 				const ranked = matchesWithTier.map(item => item.phrase);
 				
 				if (ranked.length === 0) {
@@ -1759,8 +1582,17 @@ const devLog = (...args) => {
 					}
 				}
 				
-				// 3. 排序 (按等级 0 -> 1 -> 2)
-				resultsWithTier.sort((a, b) => a.tier - b.tier);
+				// 3. 排序 (按等级 0 -> 1 -> 2)，自定义词优先
+				const customStr = localStorage.getItem('CUSTOM_RHYME_BANK');
+				const customSet = new Set(customStr ? JSON.parse(customStr) : []);
+
+				resultsWithTier.sort((a, b) => {
+					const aIsCustom = customSet.has(a.phrase);
+					const bIsCustom = customSet.has(b.phrase);
+					if (aIsCustom && !bIsCustom) return -1;
+					if (!aIsCustom && bIsCustom) return 1;
+					return a.tier - b.tier;
+				});
 
 				// 4. 应用平仄过滤
 				if (looseness >= 1.0 && pingzeFilter !== 'all') {
@@ -1839,7 +1671,7 @@ const devLog = (...args) => {
 				}
 			}
 
-			// 处理"更多匹配结果"（比用户输入长的词）
+			// 处理"更多匹配结果"（包含长词与短词/单字）
 			const matchedResults = document.getElementById('matchedResults');
 			const matchedResultsList = document.getElementById('matchedResultsList');
 			
@@ -1852,15 +1684,19 @@ const devLog = (...args) => {
 					moreMatches.push(...dictResult.moreLengths);
 				}
 
-				// 过滤尾部重复的词（最后2个字），随机保留一个
+				// 收集比用户输入更短的词（如单字）
+				if (dictResult && dictResult.lessLength && dictResult.lessLength.length > 0) {
+					moreMatches.push(...dictResult.lessLength);
+				}
+
+				// 过滤重复的词并进行一致性过滤
 				const uniqueTailMatches = [];
-				const tailGroups = {};
+				const seen = new Set();
 				
 				moreMatches.forEach(phrase => {
-					if (!phrase) return;
+					if (!phrase || seen.has(phrase)) return;
 					
-					// 增加一致性过滤：确保更多匹配结果也符合韵脚规则
-					// 对于更多匹配结果，使用更宽松的过滤以显示更多选项
+					// 增加一致性过滤：确保匹配结果也符合韵脚规则
 					const matchTier = getPhraseMatchTier(phrase, infos, looseness);
 					if (matchTier === -1) return;
 					
@@ -1868,27 +1704,30 @@ const devLog = (...args) => {
 					const tierLimit = getLoosenessTier(looseness);
 					if (matchTier > Math.min(tierLimit + 1, 2)) return;
 
-					const tail = phrase.slice(-2);
-					if (!tailGroups[tail]) {
-						tailGroups[tail] = [];
-					}
-					tailGroups[tail].push(phrase);
+					seen.add(phrase);
+					uniqueTailMatches.push(phrase);
 				});
 				
-				Object.keys(tailGroups).forEach(tail => {
-					const group = tailGroups[tail];
-					const randomPhrase = group[Math.floor(Math.random() * group.length)];
-					uniqueTailMatches.push(randomPhrase);
-				});
-				
-				// 按字数排序
-				uniqueTailMatches.sort((a, b) => a.length - b.length);
+				// 按字数排序，自定义词优先
+				const customStr = localStorage.getItem('CUSTOM_RHYME_BANK');
+				const customSet = new Set(customStr ? JSON.parse(customStr) : []);
 
-/*  */				matchedResultsList.innerHTML = '';
+				uniqueTailMatches.sort((a, b) => {
+					const aIsCustom = customSet.has(a);
+					const bIsCustom = customSet.has(b);
+					if (aIsCustom && !bIsCustom) return -1;
+					if (!aIsCustom && bIsCustom) return 1;
+					return a.length - b.length;
+				});
+
+				matchedResultsList.innerHTML = '';
 				matchedResultsList.className = 'match-grid';
 				
 				let hasContent = false;
-				uniqueTailMatches.forEach(phrase => {
+				// 限制最多展示 200 个，防止 DOM 过多造成卡顿
+				const displayMatches = uniqueTailMatches.slice(0, 200);
+
+				displayMatches.forEach(phrase => {
 					if (phrase && phrase !== userInput) {
 						const div = document.createElement('div');
 						div.className = 'match-item';
@@ -2063,13 +1902,26 @@ const devLog = (...args) => {
 		};
 
 		const init = () => {
-			document.getElementById('go').addEventListener('click', process);
+			const goBtn = document.getElementById('go');
+			goBtn.addEventListener('click', () => {
+				if (window.isDictLoading) return;
+				if (!window.dictLoaded) {
+					loadDict();
+				} else {
+					process();
+				}
+			});
 			const goStickyBtn = document.getElementById('goSticky');
 			if (goStickyBtn) {
 				goStickyBtn.addEventListener('click', () => {
-					const source = document.getElementById('source');
-					if (source) source.blur();
-					process();
+					if (window.isDictLoading) return;
+					if (!window.dictLoaded) {
+						loadDict();
+					} else {
+						const source = document.getElementById('source');
+						if (source) source.blur();
+						process();
+					}
 				});
 			}
 			const sourceInput = document.getElementById('source');
@@ -2163,12 +2015,7 @@ const devLog = (...args) => {
 				});
 			}
 
-			const loadDictBtn = document.getElementById('loadDictBtn');
-			loadDictBtn.addEventListener('click', () => {
-				// 如果已经在加载中，不重复触发
-				if (window.isDictLoading) return;
-				loadDict();
-			});
+			// loadDictBtn 已移除，加载词库功能已复用 go 按钮
 
 			const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 			if (clearHistoryBtn) {
@@ -2197,14 +2044,15 @@ const devLog = (...args) => {
 						// 清理旧的 DB (如果存在)
 						try { indexedDB.deleteDatabase('FakerRhymesDB'); } catch(e) {}
 						
-						// 清理新的 SQLite DB
+						// 清理新的 SQLite DB 和 原生 IndexedDB
 						const deleteRequest = indexedDB.deleteDatabase('RhymeSQLiteDB');
 						deleteRequest.onsuccess = () => {
 							console.log('SQLite IndexedDB 清理成功');
 						};
-						deleteRequest.onerror = (err) => {
-							console.warn('IndexedDB 清理失败:', err);
-						};
+						try {
+							const deleteReq2 = indexedDB.deleteDatabase('RhymeIndexedDB_v2');
+							deleteReq2.onsuccess = () => console.log('原生 IndexedDB 清理成功');
+						} catch(e) {}
 					} catch (e) {
 						console.warn('直接清理 IndexedDB 出错:', e);
 					}
@@ -2242,13 +2090,7 @@ const devLog = (...args) => {
 					updateDictStatus();
 					
 					// 恢复按钮状态以便再次加载
-					const loadDictBtn = document.getElementById('loadDictBtn');
-					if (loadDictBtn) {
-						loadDictBtn.disabled = false;
-						loadDictBtn.innerHTML = '📚 加载词库';
-						loadDictBtn.style.cursor = 'pointer';
-						loadDictBtn.style.opacity = '1';
-					}
+// loadDictBtn removed
 
 					setTimeout(() => {
 						clearDictBtn.innerHTML = originalText;
@@ -2285,13 +2127,12 @@ const devLog = (...args) => {
 			geminiProxyInput.value = savedProxy;
 			if (savedAiMode) {
 				dictWarning.style.display = 'none';
-				loadDictBtn.style.display = 'none';
+				// loadDictBtn removed
 			}
 
 			aiModeCheckbox.addEventListener('change', (e) => {
 				const isAi = e.target.checked;
 				dictWarning.style.display = isAi ? 'none' : 'block';
-				loadDictBtn.style.display = isAi ? 'none' : 'inline-flex';
 				localStorage.setItem('AI_MODE', isAi);
 				if (isAi && !localStorage.getItem('GEMINI_API_KEY')) {
 					aiSettingsModal.classList.add('active');
@@ -2329,26 +2170,6 @@ const devLog = (...args) => {
 				testAiSettingsBtn.addEventListener('click', testAiConnection);
 			}
 
-			// Check if online dict is already loaded
-			const updateDictStatus = () => {
-				const cachedTime = localStorage.getItem('ONLINE_DICT_TIME');
-				const dictStatus = document.getElementById('dictStatus');
-				const dictStatusText = document.getElementById('dictStatusText');
-				
-				if (cachedTime) {
-					const count = localStorage.getItem('ONLINE_DICT_COUNT') || '7000+';
-					const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '核心词库';
-					const date = new Date(Number(cachedTime));
-					
-					loadDictBtn.innerHTML = `✓ 已缓存`;
-					dictStatus.style.display = 'block';
-					dictStatusText.textContent = `📖 词库：${count} 个汉字（${source}） | ${date.toLocaleString('zh-CN')}`;
-					setDictLoadStatus('检测到本地词库缓存，可直接使用。', 'success');
-				} else {
-					setDictLoadStatus('首次使用将自动加载词库，请稍候。');
-				}
-			};
-			
 			updateDictStatus();
 			renderQuickLists();
 

@@ -1,4 +1,4 @@
-// Version: v2.0.4
+// Version: v2.3.9
 importScripts('./js/version.js');
 
 const CACHE_VERSION = typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'dev';
@@ -10,20 +10,15 @@ const ASSET_PATHS = [
   './custom.html',
   './css/style.css',
   './js/data.js',
-  './js/db.js',
   './js/main.js',
   './js/version.js',
   './js/animations.js',
   './js/help-modal.js',
   './js/performance-test.js',
   './js/sw-init.js',
-  './js/lib/sql-wasm.min.js',
-  './js/lib/sql-wasm.wasm',
   './manifest.json',
   './icon.svg',
-  './dict_part_1.json',
-  './dict_part_2.json',
-  './dict_part_3.json'
+  // dict.txt is NOT pre-cached here to save install time, it's cached on demand
 ];
 const ASSETS = ASSET_PATHS.map((path) => new URL(path, APP_ROOT).toString());
 
@@ -54,13 +49,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || !url.pathname.startsWith(APP_ROOT.pathname)) return;
 
-  const isDictFile = url.pathname.endsWith('/dict_part_1.json') ||
-                     url.pathname.endsWith('/dict_part_2.json') ||
-                     url.pathname.endsWith('/dict_part_3.json');
-  const isWasmFile = url.pathname.endsWith('/js/lib/sql-wasm.min.js') ||
-                     url.pathname.endsWith('/js/lib/sql-wasm.wasm');
+  const isDictFile = url.pathname.endsWith('/dict.txt');
 
-  if (isDictFile || isWasmFile) {
+  if (isDictFile) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request, { ignoreSearch: true });

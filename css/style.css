@@ -2153,3 +2153,17 @@ a.btn.ghost.small { min-height: 44px !important; display: inline-flex; align-ite
         width: 35%;
     }
 }
+
+/* Ensure all interactive controls are rendered above background decorative overlays */
+textarea,
+input,
+select,
+button,
+.btn,
+.segmented-control,
+.segmented-control button,
+.history-side,
+.controls-stack {
+	position: relative;
+	z-index: 5;
+}
