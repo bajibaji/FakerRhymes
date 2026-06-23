@@ -2247,79 +2247,7 @@ button,
 }
 
 /* 4. 移动端音调表格自适应响应式布局 (Card Layout) */
-@media (max-width: 600px) {
-	#detailBody {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		width: 100%;
-	}
 
-	/* 隐藏表格头部 */
-	table thead {
-		display: none;
-	}
-
-	table, table tbody {
-		display: block;
-		width: 100%;
-	}
-
-	/* 每个 TR 转为卡片式布局 */
-	table tbody tr {
-		display: flex;
-		flex-direction: column;
-		background: rgba(255, 255, 255, 0.03) !important;
-		border: 1px solid var(--border) !important;
-		border-radius: 12px !important;
-		padding: 12px 16px !important;
-		gap: 8px;
-		margin-bottom: 8px;
-		transform: none !important;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-	}
-
-	table tbody tr:hover {
-		background: rgba(124, 58, 237, 0.05) !important;
-		border-color: rgba(124, 58, 237, 0.3) !important;
-	}
-
-	/* 每一个单元格 TD 的呈现 */
-	table tbody td {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 4px 0 !important;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
-		font-size: 14px !important;
-		width: 100% !important;
-	}
-
-	table tbody td:last-child {
-		border-bottom: none !important;
-	}
-
-	/* 模拟表格头部标签 */
-	table tbody td::before {
-		content: attr(data-label);
-		font-weight: 600;
-		color: var(--muted);
-		font-size: 13px;
-	}
-
-	/* 确保下拉和输入在移动端拥有极佳的高度和点击区 */
-	.fin-input,
-	.tone-select {
-		height: 38px !important;
-		padding: 6px 12px !important;
-		border: 1px solid rgba(255, 255, 255, 0.15) !important;
-		border-radius: 8px !important;
-		background: rgba(10, 14, 26, 0.6) !important;
-		font-size: 14px !important;
-		width: 80px !important;
-		text-align: right !important;
-	}
-}
 
 /* 5. 空状态和结果动画控制 (CLS & Animation Fix) */
 .results-container-wrapper {
