@@ -6,7 +6,7 @@
 
 # 在线使用入口：**[fuckrapper.online](https://fuckrapper.online)**
 
-# 备用网站：*[Github](https://bajibaji.github.io/FakerRhymes/))*
+### 备用网站：[Github](https://bajibaji.github.io/FakerRhymes/)
 ---
 
 ## 页面截图实测
