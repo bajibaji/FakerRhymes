@@ -201,13 +201,24 @@ const devLog = (...args) => {
 
 				setTopProgress(40);
 				
-				// 极速加载纯文本字典
-				const fetchUrl = new URL('dict.txt', window.location.href).href;
-				const response = await fetch(fetchUrl);
-				if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+				// 极速并发加载拆分后的纯文本字典
+				const fetchUrl1 = new URL('dict_part1.txt', window.location.href).href;
+				const fetchUrl2 = new URL('dict_part2.txt', window.location.href).href;
+				
+				const [response1, response2] = await Promise.all([
+					fetch(fetchUrl1),
+					fetch(fetchUrl2)
+				]);
+				
+				if (!response1.ok) throw new Error(`HTTP error part 1! status: ${response1.status}`);
+				if (!response2.ok) throw new Error(`HTTP error part 2! status: ${response2.status}`);
 				
 				setTopProgress(80);
-				globalDictText = await response.text();
+				const text1 = await response1.text();
+				const text2 = await response2.text();
+				
+				// 拼装词库，处理尾部换行符
+				globalDictText = text1.endsWith('\n') ? (text1 + text2) : (text1 + '\n' + text2);
 
 				// 统计词库总数与歌词词语数量
 				const commaCount = (globalDictText.match(/,/g) || []).length;

@@ -1,4 +1,4 @@
-// Version: v2.3.12
+// Version: v2.3.13
 importScripts('./js/version.js');
 
 const CACHE_VERSION = typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'dev';
@@ -49,7 +49,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || !url.pathname.startsWith(APP_ROOT.pathname)) return;
 
-  const isDictFile = url.pathname.endsWith('/dict.txt');
+  const isDictFile = url.pathname.endsWith('/dict_part1.txt') || url.pathname.endsWith('/dict_part2.txt');
 
   if (isDictFile) {
     event.respondWith(
