@@ -184,6 +184,26 @@ const devLog = (...args) => {
 		let keysArray = null; // Uint8Array
 		let wordsArray = null; // Uint8Array
 
+		let wasmModule = null;
+		let isWasmEnabled = false;
+
+		async function initWasmEngine(combinedArray) {
+			try {
+				const module = await import('./pkg/wasm_search.js');
+				await module.default();
+				const success = module.init_dict(combinedArray);
+				if (success) {
+					wasmModule = module;
+					isWasmEnabled = true;
+					devLog('WASM 检索引擎就绪！');
+				} else {
+					console.warn('WASM init_dict 返回失败，降级使用 JS 二分引擎。');
+				}
+			} catch (e) {
+				console.warn('WASM 引擎载入失败，降级使用 JS 二分引擎，详情:', e);
+			}
+		}
+
 		const utf8Decoder = new TextDecoder('utf-8');
 
 		function getKeyString(i) {
@@ -310,6 +330,8 @@ const devLog = (...args) => {
 				localStorage.setItem('ONLINE_DICT_LYRIC_COUNT', String(lyricCount));
 				localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
 				
+				await initWasmEngine(combinedArray);
+
 				setDictLoadStatus('词库已就绪，可离线使用。', 'success');
 				devLog('二进制词库分片合并就绪总耗时:', (performance.now() - startTime).toFixed(2), 'ms', '大小:', (dictBuffer.byteLength / 1024 / 1024).toFixed(2), 'MB');
 				setTopProgress(100);
@@ -723,14 +745,40 @@ const devLog = (...args) => {
 			};
 	
 			// 1. 精确匹配（二分查找）
-			if (window.dictLoaded && indexView) {
-				for (const qk of variantKeys) {
-					const qkReversed = qk.split('').reverse().join('');
-					const wordsStr = queryExact(qkReversed);
-					if (wordsStr) {
-						wordsStr.split(',').forEach(phrase => {
-							addMatch(phrase);
-						});
+			if (window.dictLoaded) {
+				if (isWasmEnabled && wasmModule) {
+					try {
+						const resStr = wasmModule.query_exact_batch(variantKeys);
+						if (resStr) {
+							resStr.split(',').forEach(phrase => {
+								if (phrase) {
+									addMatch(phrase);
+								}
+							});
+						}
+					} catch (e) {
+						console.warn('WASM 精确匹配批量查询失败，降级到 JS 二分查找:', e);
+						if (indexView) {
+							for (const qk of variantKeys) {
+								const qkReversed = qk.split('').reverse().join('');
+								const wordsStr = queryExact(qkReversed);
+								if (wordsStr) {
+									wordsStr.split(',').forEach(phrase => {
+										addMatch(phrase);
+									});
+								}
+							}
+						}
+					}
+				} else if (indexView) {
+					for (const qk of variantKeys) {
+						const qkReversed = qk.split('').reverse().join('');
+						const wordsStr = queryExact(qkReversed);
+						if (wordsStr) {
+							wordsStr.split(',').forEach(phrase => {
+								addMatch(phrase);
+							});
+						}
 					}
 				}
 			}
@@ -751,34 +799,82 @@ const devLog = (...args) => {
 			emit(getCategorized());
 	
 			// 2. 后缀匹配（二进制前缀范围扫描）
-			if (queryVariantSet.size > 0 && window.dictLoaded && indexView) {
+			if (queryVariantSet.size > 0 && window.dictLoaded) {
 				if (searchId !== currentSearchId) return null;
 	
-				const suffixes = [];
-				for (const qk of queryVariantSet) {
-					if (qk.length >= 2) {
-						suffixes.push(qk.split('').reverse().join(''));
-					}
-				}
-	
-				if (suffixes.length > 0) {
-					let count = 0;
-					for (const suffixReversed of suffixes) {
-						const wordsStrList = queryPrefixRange(suffixReversed);
-						for (const wordsStr of wordsStrList) {
-							const phrases = wordsStr.split(',');
-							for (const phrase of phrases) {
-								if (phrase.length > sourceLength) {
-									addMatch(phrase);
-								}
+				if (isWasmEnabled && wasmModule) {
+					try {
+						const suffixes = [];
+						for (const qk of queryVariantSet) {
+							if (qk.length >= 2) {
+								suffixes.push(qk);
 							}
 						}
+						if (suffixes.length > 0) {
+							const resStr = wasmModule.query_suffix_batch(suffixes);
+							if (resStr) {
+								resStr.split(',').forEach(phrase => {
+									if (phrase && phrase.length > sourceLength) {
+										addMatch(phrase);
+									}
+								});
+							}
+							devLog(`[Tier ${tier}] WASM 后缀匹配完成`);
+						}
+					} catch (e) {
+						console.warn('WASM 后缀匹配批量查询失败，降级到 JS 后缀扫描:', e);
+						if (indexView) {
+							const suffixesReversed = [];
+							for (const qk of queryVariantSet) {
+								if (qk.length >= 2) {
+									suffixesReversed.push(qk.split('').reverse().join(''));
+								}
+							}
+							if (suffixesReversed.length > 0) {
+								let count = 0;
+								for (const suffixReversed of suffixesReversed) {
+									const wordsStrList = queryPrefixRange(suffixReversed);
+									for (const wordsStr of wordsStrList) {
+										const phrases = wordsStr.split(',');
+										for (const phrase of phrases) {
+											if (phrase.length > sourceLength) {
+												addMatch(phrase);
+											}
+										}
+									}
+									count++;
+									if (count > 2000) break;
+								}
+								devLog(`[Tier ${tier}] 二进制二分后缀匹配完成`);
+							}
+						}
+					}
+				} else if (indexView) {
+					const suffixesReversed = [];
+					for (const qk of queryVariantSet) {
+						if (qk.length >= 2) {
+							suffixesReversed.push(qk.split('').reverse().join(''));
+						}
+					}
+					if (suffixesReversed.length > 0) {
+						let count = 0;
+						for (const suffixReversed of suffixesReversed) {
+							const wordsStrList = queryPrefixRange(suffixReversed);
+							for (const wordsStr of wordsStrList) {
+								const phrases = wordsStr.split(',');
+								for (const phrase of phrases) {
+									if (phrase.length > sourceLength) {
+										addMatch(phrase);
+											}
+										}
+									}
 						count++;
 						if (count > 2000) break; // 性能兜底，防止极端情况卡死
+								}
+						devLog(`[Tier ${tier}] 二进制二分后缀匹配完成`);
+							}
+						}
 					}
-					devLog(`[Tier ${tier}] 二进制二分后缀匹配完成`);
-				}
-			}
 			
 			emit(getCategorized()); // 后缀查询完更新一次
 

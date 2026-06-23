@@ -1,4 +1,4 @@
-// Version: v2.3.13
+// Version: v2.4.0
 importScripts('./js/version.js');
 
 const CACHE_VERSION = typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'dev';
@@ -16,6 +16,8 @@ const ASSET_PATHS = [
   './js/help-modal.js',
   './js/performance-test.js',
   './js/sw-init.js',
+  './js/pkg/wasm_search.js',
+  './js/pkg/wasm_search_bg.wasm',
   './manifest.json',
   './icon.svg',
   // dict.txt is NOT pre-cached here to save install time, it's cached on demand
@@ -77,6 +79,7 @@ self.addEventListener('fetch', (event) => {
   const isAppFile = url.pathname.endsWith('.html') ||
                     url.pathname.endsWith('.css') ||
                     url.pathname.endsWith('.js') ||
+                    url.pathname.endsWith('.wasm') ||
                     url.pathname.endsWith('/manifest.json') ||
                     url.pathname.endsWith('/icon.svg') ||
                     url.pathname === APP_ROOT.pathname;
