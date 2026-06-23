@@ -49,7 +49,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || !url.pathname.startsWith(APP_ROOT.pathname)) return;
 
-  const isDictFile = url.pathname.endsWith('/dict_part1.txt') || url.pathname.endsWith('/dict_part2.txt');
+  const isDictFile = url.pathname.endsWith('/dict_part1.bin') || url.pathname.endsWith('/dict_part2.bin');
 
   if (isDictFile) {
     event.respondWith(

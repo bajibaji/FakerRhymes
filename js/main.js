@@ -2,7 +2,7 @@
 		// 编码版本历史:
 		//   v2: 'ü':'y' — 与 'v':'y' 一致，修复 ü 编码
 		//   v3 (当前): 新增 'van':'B' 映射（修复 üan 缺失编码），移除 legacyKeyMap 旧键扩展
-		const DICT_ENCODING_VERSION = '3';
+		const DICT_ENCODING_VERSION = '4';
 		const finalToCode = {
 			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
 			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
@@ -176,7 +176,76 @@ const devLog = (...args) => {
 		const hasChineseChars = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
 		const isOnlyChinese = (text) => /^[\u4e00-\u9fa5]+$/.test(String(text || ''));
 
-		let globalDictText = '';
+		let dictBuffer = null;
+		let entryCount = 0;
+		let keysStart = 0;
+		let wordsStart = 0;
+		let indexView = null; // Uint32Array
+		let keysArray = null; // Uint8Array
+		let wordsArray = null; // Uint8Array
+
+		const utf8Decoder = new TextDecoder('utf-8');
+
+		function getKeyString(i) {
+			const keyOffset = indexView[i * 3];
+			const keyLen = keysArray[keyOffset];
+			let s = '';
+			for (let j = 0; j < keyLen; j++) {
+				s += String.fromCharCode(keysArray[keyOffset + 1 + j]);
+			}
+			return s;
+		}
+
+		function getWordsString(i) {
+			const wordsOffset = indexView[i * 3 + 1];
+			const wordsLen = indexView[i * 3 + 2];
+			const slice = wordsArray.subarray(wordsOffset, wordsOffset + wordsLen);
+			return utf8Decoder.decode(slice);
+		}
+
+		function queryExact(targetKeyReversed) {
+			let low = 0;
+			let high = entryCount - 1;
+			while (low <= high) {
+				const mid = (low + high) >> 1;
+				const midKey = getKeyString(mid);
+				if (midKey === targetKeyReversed) {
+					return getWordsString(mid);
+				} else if (midKey < targetKeyReversed) {
+					low = mid + 1;
+				} else {
+					high = mid - 1;
+				}
+			}
+			return null;
+		}
+
+		function queryPrefixRange(prefixReversed) {
+			let low = 0;
+			let high = entryCount - 1;
+			while (low <= high) {
+				const mid = (low + high) >> 1;
+				const midKey = getKeyString(mid);
+				if (midKey < prefixReversed) {
+					low = mid + 1;
+				} else {
+					high = mid - 1;
+				}
+			}
+			const results = [];
+			for (let i = low; i < entryCount; i++) {
+				const key = getKeyString(i);
+				if (key.startsWith(prefixReversed)) {
+					const wordsStr = getWordsString(i);
+					if (wordsStr) {
+						results.push(wordsStr);
+					}
+				} else {
+					break;
+				}
+			}
+			return results;
+		}
 
 		const loadDict = async () => {
 			if (window.isDictLoading) return;
@@ -193,7 +262,6 @@ const devLog = (...args) => {
 			try {
 				const startTime = performance.now();
 
-				// 检测字典版本更新
 				const storedVersion = localStorage.getItem('DICT_ENCODING_VERSION');
 				if (storedVersion !== DICT_ENCODING_VERSION) {
 					devLog(`字典版本变动 (v${storedVersion || '1'} → v${DICT_ENCODING_VERSION})`);
@@ -201,9 +269,8 @@ const devLog = (...args) => {
 
 				setTopProgress(40);
 				
-				// 极速并发加载拆分后的纯文本字典
-				const fetchUrl1 = new URL('dict_part1.txt', window.location.href).href;
-				const fetchUrl2 = new URL('dict_part2.txt', window.location.href).href;
+				const fetchUrl1 = new URL('dict_part1.bin', window.location.href).href;
+				const fetchUrl2 = new URL('dict_part2.bin', window.location.href).href;
 				
 				const [response1, response2] = await Promise.all([
 					fetch(fetchUrl1),
@@ -213,18 +280,28 @@ const devLog = (...args) => {
 				if (!response1.ok) throw new Error(`HTTP error part 1! status: ${response1.status}`);
 				if (!response2.ok) throw new Error(`HTTP error part 2! status: ${response2.status}`);
 				
-				setTopProgress(80);
-				const text1 = await response1.text();
-				const text2 = await response2.text();
+				setTopProgress(70);
+				const buf1 = await response1.arrayBuffer();
+				const buf2 = await response2.arrayBuffer();
 				
-				// 拼装词库，处理尾部换行符
-				globalDictText = text1.endsWith('\n') ? (text1 + text2) : (text1 + '\n' + text2);
+				setTopProgress(85);
+				const totalLength = buf1.byteLength + buf2.byteLength;
+				const combinedArray = new Uint8Array(totalLength);
+				combinedArray.set(new Uint8Array(buf1), 0);
+				combinedArray.set(new Uint8Array(buf2), buf1.byteLength);
+				
+				setTopProgress(95);
+				dictBuffer = combinedArray.buffer;
+				const header = new DataView(dictBuffer, 0, 24);
+				entryCount = header.getUint32(0, true);
+				keysStart = header.getUint32(4, true);
+				wordsStart = header.getUint32(8, true);
+				const totalWords = header.getUint32(12, true);
+				const lyricCount = header.getUint32(16, true);
 
-				// 统计词库总数与歌词词语数量
-				const commaCount = (globalDictText.match(/,/g) || []).length;
-				const lineCount = (globalDictText.match(/\n/g) || []).length + (globalDictText.length > 0 ? 1 : 0);
-				const totalWords = commaCount + lineCount;
-				const lyricCount = (globalDictText.match(/\*/g) || []).length;
+				indexView = new Uint32Array(dictBuffer, 24, entryCount * 3);
+				keysArray = new Uint8Array(dictBuffer, keysStart, wordsStart - keysStart);
+				wordsArray = new Uint8Array(dictBuffer, wordsStart);
 
 				window.dictLoaded = true;
 				window.isDictLoading = false;
@@ -234,7 +311,7 @@ const devLog = (...args) => {
 				localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
 				
 				setDictLoadStatus('词库已就绪，可离线使用。', 'success');
-				devLog('纯文本词库就绪总耗时:', (performance.now() - startTime).toFixed(2), 'ms', '大小:', (globalDictText.length / 1024 / 1024).toFixed(2), 'MB');
+				devLog('二进制词库分片合并就绪总耗时:', (performance.now() - startTime).toFixed(2), 'ms', '大小:', (dictBuffer.byteLength / 1024 / 1024).toFixed(2), 'MB');
 				setTopProgress(100);
 				
 				setTimeout(() => {
@@ -242,7 +319,6 @@ const devLog = (...args) => {
 					if (bar) bar.classList.add('complete');
 				}, 800);
 				
-				// 恢复按钮文本与状态
 				if (btn) {
 					btn.disabled = false;
 					btn.innerHTML = '生成押韵';
@@ -250,7 +326,6 @@ const devLog = (...args) => {
 					btn.classList.remove('error');
 				}
 				
-				// 自动更新本地状态
 				updateDictStatus();
 
 				const warning = document.getElementById('dictWarning');
@@ -261,11 +336,10 @@ const devLog = (...args) => {
 				}
 
 			} catch (e) {
-				console.error('纯文本词库载入失败:', e);
+				console.error('二进制词库载入失败:', e);
 				window.isDictLoading = false;
 				window.dictLoaded = false;
 
-				// 用户友好的错误信息
 				const errMsg = (e.message || '').toLowerCase();
 				let userMsg = '词库加载失败，请点击按钮重试。';
 				if (errMsg.includes('failed to fetch') || errMsg.includes('network')) {
@@ -314,7 +388,6 @@ const devLog = (...args) => {
 				}
 				window.dictLoaded = true;
 				
-				// loadDictBtn removed
 				const fmtNum = (v) => isNaN(Number(v)) ? String(v) : Number(v).toLocaleString();
 				dictStatus.style.display = 'block';
 				dictStatusText.textContent = `词库：共 ${fmtNum(count)} 个词语（歌词 ${fmtNum(lyricCount)} 个） | ${date.toLocaleString('zh-CN')}`;
@@ -649,13 +722,13 @@ const devLog = (...args) => {
 				matchedByWordCount[phraseLen].add(phrase);
 			};
 	
-			// 1. 精确匹配（通过纯文本正则提取）
-			if (globalDictText) {
+			// 1. 精确匹配（二分查找）
+			if (window.dictLoaded && indexView) {
 				for (const qk of variantKeys) {
-					const exactRegex = new RegExp(`(?:^|\\n)${qk}:([^\\n]+)`);
-					const match = globalDictText.match(exactRegex);
-					if (match && match[1]) {
-						match[1].split(',').forEach(phrase => {
+					const qkReversed = qk.split('').reverse().join('');
+					const wordsStr = queryExact(qkReversed);
+					if (wordsStr) {
+						wordsStr.split(',').forEach(phrase => {
 							addMatch(phrase);
 						});
 					}
@@ -677,27 +750,23 @@ const devLog = (...args) => {
 			
 			emit(getCategorized());
 	
-			// 2. 后缀匹配（纯文本全局正则）
-			if (queryVariantSet.size > 0 && globalDictText) {
+			// 2. 后缀匹配（二进制前缀范围扫描）
+			if (queryVariantSet.size > 0 && window.dictLoaded && indexView) {
 				if (searchId !== currentSearchId) return null;
 	
 				const suffixes = [];
 				for (const qk of queryVariantSet) {
 					if (qk.length >= 2) {
-						suffixes.push(qk);
+						suffixes.push(qk.split('').reverse().join(''));
 					}
 				}
 	
 				if (suffixes.length > 0) {
-					const pattern = suffixes.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-					// 匹配以 suffix 结尾的 key。行结构为: "key:words"
-					const regex = new RegExp(`(?:^|\\n)[^:\\n]*(?:${pattern}):([^\\n]+)`, 'g');
-					
-					let match;
 					let count = 0;
-					while ((match = regex.exec(globalDictText)) !== null) {
-						if (match[1]) {
-							const phrases = match[1].split(',');
+					for (const suffixReversed of suffixes) {
+						const wordsStrList = queryPrefixRange(suffixReversed);
+						for (const wordsStr of wordsStrList) {
+							const phrases = wordsStr.split(',');
 							for (const phrase of phrases) {
 								if (phrase.length > sourceLength) {
 									addMatch(phrase);
@@ -707,7 +776,7 @@ const devLog = (...args) => {
 						count++;
 						if (count > 2000) break; // 性能兜底，防止极端情况卡死
 					}
-					devLog(`[Tier ${tier}] 文本正则后缀匹配完成`);
+					devLog(`[Tier ${tier}] 二进制二分后缀匹配完成`);
 				}
 			}
 			

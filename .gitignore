@@ -3,6 +3,5 @@ dist/*
 .playwright-mcp/
 /plans
 .agents/
-.github/
 .roo/
 .vscode/
