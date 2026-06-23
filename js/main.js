@@ -156,7 +156,7 @@ const devLog = (...args) => {
 			const lower = msg.toLowerCase();
 			if (!msg) return '请检查 API Key 或代理设置，然后重试。';
 			if (lower.includes('failed to fetch') || lower.includes('networkerror')) {
-				return '网络连接失败，请检查代理地址或本地网络连接。';
+				return '网络连接或跨域请求失败。由于浏览器安全限制，直连官方 API 可能会被跨域拦截（CORS error）。请确保已在“API 代理地址”中配置了有效的代理，或者检查网络连接。';
 			}
 			if (lower.includes('api key not valid') || lower.includes('permission denied')) {
 				return 'API Key 无效或无权限，请在 AI 设置中重新填写。';
@@ -273,11 +273,7 @@ const devLog = (...args) => {
 			setDictLoadStatus('正在极速载入词库...');
 			setTopProgress(10);
 
-			const btn = document.getElementById('go');
-			if (btn) {
-				btn.disabled = true;
-				btn.innerHTML = '<i class="ri-loader-4-line"></i> 载入中...';
-			}
+			updateGenerateButtonState();
 
 			try {
 				const startTime = performance.now();
@@ -341,12 +337,7 @@ const devLog = (...args) => {
 					if (bar) bar.classList.add('complete');
 				}, 800);
 				
-				if (btn) {
-					btn.disabled = false;
-					btn.innerHTML = '生成押韵';
-					btn.style.background = '';
-					btn.classList.remove('error');
-				}
+				updateGenerateButtonState();
 				
 				updateDictStatus();
 
@@ -378,11 +369,7 @@ const devLog = (...args) => {
 					if (bar) bar.classList.add('error');
 				}, 100);
 
-				if (btn) {
-					btn.innerHTML = '<i class="ri-restart-line"></i> 点击重试加载';
-					btn.disabled = false;
-					btn.style.background = 'linear-gradient(135deg, #fb7185, #fde047)';
-				}
+				updateGenerateButtonState();
 
 				const warning = document.getElementById('dictWarning');
 				if (warning) {
@@ -397,29 +384,22 @@ const devLog = (...args) => {
 			const cachedTime = localStorage.getItem('ONLINE_DICT_TIME');
 			const dictStatus = document.getElementById('dictStatus');
 			const dictStatusText = document.getElementById('dictStatusText');
-			const goBtn = document.getElementById('go');
 			
 			if (cachedTime) {
 				const count = localStorage.getItem('ONLINE_DICT_COUNT') || '?';
 				const lyricCount = localStorage.getItem('ONLINE_DICT_LYRIC_COUNT') || '?';
 				const date = new Date(Number(cachedTime));
 				
-				if (goBtn) {
-					goBtn.innerHTML = '生成押韵';
-					goBtn.disabled = false;
-				}
 				window.dictLoaded = true;
+				updateGenerateButtonState();
 				
 				const fmtNum = (v) => isNaN(Number(v)) ? String(v) : Number(v).toLocaleString();
 				dictStatus.style.display = 'block';
 				dictStatusText.textContent = `词库：共 ${fmtNum(count)} 个词语（歌词 ${fmtNum(lyricCount)} 个） | ${date.toLocaleString('zh-CN')}`;
 				setDictLoadStatus('检测到本地词库缓存，可直接使用。', 'success');
 			} else {
-				if (goBtn) {
-					goBtn.innerHTML = '<i class="ri-book-read-line"></i> 加载词库';
-					goBtn.disabled = false;
-				}
 				window.dictLoaded = false;
+				updateGenerateButtonState();
 				setDictLoadStatus('首次使用将自动加载词库，请稍候。');
 			}
 		};
@@ -1155,15 +1135,34 @@ const devLog = (...args) => {
 			return normalized;
 		};
 
+		const fetchWithTimeout = async (url, options, timeoutMs = 15000) => {
+			const controller = new AbortController();
+			const id = setTimeout(() => controller.abort(), timeoutMs);
+			try {
+				const response = await fetch(url, {
+					...options,
+					signal: controller.signal
+				});
+				clearTimeout(id);
+				return response;
+			} catch (error) {
+				clearTimeout(id);
+				if (error.name === 'AbortError') {
+					throw new Error('请求超时（15 秒限制），请检查网络连接或尝试更换 API 代理。');
+				}
+				throw error;
+			}
+		};
+
 		const requestGemini = async (prompt, apiKey, proxy, model = 'gemini-2.0-flash') => {
 			const baseUrl = getGeminiBaseUrl(proxy);
-			const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+			const response = await fetchWithTimeout(`${baseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					contents: [{ parts: [{ text: prompt }] }]
 				})
-			});
+			}, 15000);
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}));
@@ -1200,21 +1199,21 @@ const devLog = (...args) => {
 
 		const getDefaultModel = (provider) => {
 			switch (provider) {
-				case 'gemini': return 'gemini-3.5-flash';
-				case 'claude': return 'claude-sonnet-4.5-20250929';
-				case 'openai': return 'gpt-5-mini';
-				case 'deepseek': return 'deepseek-v4-flash';
+				case 'gemini': return 'gemini-2.0-flash';
+				case 'claude': return 'claude-3-5-sonnet-20241022';
+				case 'openai': return 'gpt-4o-mini';
+				case 'deepseek': return 'deepseek-chat';
 				case 'siliconflow': return 'deepseek-ai/DeepSeek-V3';
-				case 'moonshot': return 'kimi-k2.6';
-				case 'groq': return 'llama-3.3-70b-versatile';
+				case 'moonshot': return 'moonshot-v1-8k';
+				case 'groq': return 'llama-3.3-70b-specdec';
 				case 'openrouter': return 'google/gemini-2.0-flash-exp:free';
-				case 'zhipu': return 'glm-5';
-				case 'qwen': return 'qwen3.7-max';
-				case 'qianfan': return 'ERNIE-4.0-Turbo-8K';
+				case 'zhipu': return 'glm-4-flash';
+				case 'qwen': return 'qwen-plus';
+				case 'qianfan': return 'ERNIE-Speed-8K';
 				case 'hunyuan': return 'hunyuan-standard';
-				case 'volcengine': return 'Doubao-pro-32k';
+				case 'volcengine': return 'Doubao-lite-4k';
 				case 'lingyi': return 'yi-lightning';
-				case 'minimax': return 'MiniMax-M2.7';
+				case 'minimax': return 'abab6.5g-chat';
 				default: return '';
 			}
 		};
@@ -1249,7 +1248,7 @@ const devLog = (...args) => {
 				url = `${url}/v1/messages`;
 			}
 
-			const response = await fetch(url, {
+			const response = await fetchWithTimeout(url, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -1264,7 +1263,7 @@ const devLog = (...args) => {
 					],
 					max_tokens: 1024
 				})
-			});
+			}, 15000);
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}));
@@ -1289,7 +1288,7 @@ const devLog = (...args) => {
 				url = `${url}/chat/completions`;
 			}
 			
-			const response = await fetch(url, {
+			const response = await fetchWithTimeout(url, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -1301,7 +1300,7 @@ const devLog = (...args) => {
 						{ role: 'user', content: prompt }
 					]
 				})
-			});
+			}, 15000);
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}));
@@ -1319,67 +1318,69 @@ const devLog = (...args) => {
 		const processAI = async (src, infos, looseness) => {
 			if (isAiLoading) return; // 防止并发请求
 
-			let aiConfigs = null;
-			try {
-				aiConfigs = JSON.parse(localStorage.getItem('AI_CONFIGS'));
-			} catch (e) {
-				console.error('读取 AI_CONFIGS 失败:', e);
-			}
-
-			if (!aiConfigs) {
-				const oldKey = localStorage.getItem('GEMINI_API_KEY');
-				const oldProxy = localStorage.getItem('GEMINI_PROXY') || '';
-				if (oldKey) {
-					aiConfigs = {
-						activeProvider: 'gemini',
-						providers: {
-							gemini: { apiKey: oldKey, baseUrl: oldProxy, model: 'gemini-2.0-flash' }
-						}
-					};
-				}
-			}
-
-			if (!aiConfigs) {
-				alert('请先配置 AI 服务商与密钥');
-				const aiSettingsModal = document.getElementById('aiSettingsModal');
-				if (aiSettingsModal) {
-					aiSettingsModal.classList.add('active');
-					aiSettingsModal.setAttribute('aria-hidden', 'false');
-				}
-				return;
-			}
-
-			const provider = aiConfigs.activeProvider || 'gemini';
-			const providerConf = aiConfigs.providers?.[provider] || {};
-			const apiKey = providerConf.apiKey;
-			const baseUrl = providerConf.baseUrl !== undefined ? providerConf.baseUrl : getDefaultBaseUrl(provider);
-			const model = providerConf.model || getDefaultModel(provider);
-
-			if (!apiKey) {
-				alert(`请先配置 ${getProviderDisplayName(provider)} 的 API Key`);
-				const aiSettingsModal = document.getElementById('aiSettingsModal');
-				if (aiSettingsModal) {
-					aiSettingsModal.classList.add('active');
-					aiSettingsModal.setAttribute('aria-hidden', 'false');
-				}
-				return;
-			}
-
 			isAiLoading = true;
+			setGenerateButtonsLoading(true);
 
 			const output = document.getElementById('output');
 			const badges = document.getElementById('badges');
 			const matchedResultsList = document.getElementById('matchedResultsList');
-			
-			output.innerHTML = '<i class="ri-robot-2-line"></i> AI 正在思考中...';
-			badges.innerHTML = '<div class="badge"><i class="ri-time-line"></i> 请稍候</div>';
-			matchedResultsList.innerHTML = '';
 
-			const tier = getLoosenessTier(looseness);
-			const mySearchId = currentSearchId; // 捕获当前的 SearchId
-			const rhymeInfo = infos.map(i => `${i.char}(${i.fin}${i.tone})`).join(' ');
-			
-			const prompt = `你是一个深谙中文韵律的顶级作词人，现在需要根据一个词寻找押韵的词汇。
+			try {
+				let aiConfigs = null;
+				try {
+					aiConfigs = JSON.parse(localStorage.getItem('AI_CONFIGS'));
+				} catch (e) {
+					console.error('读取 AI_CONFIGS 失败:', e);
+				}
+
+				if (!aiConfigs) {
+					const oldKey = localStorage.getItem('GEMINI_API_KEY');
+					const oldProxy = localStorage.getItem('GEMINI_PROXY') || '';
+					if (oldKey) {
+						aiConfigs = {
+							activeProvider: 'gemini',
+							providers: {
+								gemini: { apiKey: oldKey, baseUrl: oldProxy, model: 'gemini-2.0-flash' }
+							}
+						};
+					}
+				}
+
+				if (!aiConfigs) {
+					alert('请先配置 AI 服务商与密钥');
+					const aiSettingsModal = document.getElementById('aiSettingsModal');
+					if (aiSettingsModal) {
+						aiSettingsModal.classList.add('active');
+						aiSettingsModal.setAttribute('aria-hidden', 'false');
+					}
+					return;
+				}
+
+				const provider = aiConfigs.activeProvider || 'gemini';
+				const providerConf = aiConfigs.providers?.[provider] || {};
+				const apiKey = providerConf.apiKey;
+				const baseUrl = providerConf.baseUrl || getDefaultBaseUrl(provider);
+				const model = providerConf.model || getDefaultModel(provider);
+
+				if (!apiKey) {
+					alert(`请先配置 ${getProviderDisplayName(provider)} 的 API Key`);
+					const aiSettingsModal = document.getElementById('aiSettingsModal');
+					if (aiSettingsModal) {
+						aiSettingsModal.classList.add('active');
+						aiSettingsModal.setAttribute('aria-hidden', 'false');
+					}
+					return;
+				}
+
+				if (output) output.innerHTML = '<i class="ri-robot-2-line"></i> AI 正在思考中...';
+				if (badges) badges.innerHTML = '<div class="badge"><i class="ri-time-line"></i> 请稍候</div>';
+				if (matchedResultsList) matchedResultsList.innerHTML = '';
+
+				const tier = getLoosenessTier(looseness);
+				const mySearchId = currentSearchId; // 捕获当前的 SearchId
+				const rhymeInfo = infos.map(i => `${i.char}(${i.fin}${i.tone})`).join(' ');
+				
+				const prompt = `你是一个深谙中文韵律的顶级作词人，现在需要根据一个词寻找押韵的词汇。
 
 【输入词】：${src}
 【韵部】：${rhymeInfo}
@@ -1393,7 +1394,6 @@ const devLog = (...args) => {
 5. 只返回词语列表，用空格分隔，不要有任何解释。
 6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
 
-			try {
 				let text;
 				if (provider === 'gemini') {
 					text = await requestGemini(prompt, apiKey, baseUrl, model);
@@ -1442,20 +1442,20 @@ const devLog = (...args) => {
 				currentDictResult = dictResult;
 				render(newInfos, firstAiWord, dictResult, src, true);
 
-				} catch (e) {
-					console.error('AI 生成失败:', e);
-					const errorMsg = e.message || '未知错误';
-					const hint = getAiErrorHint(errorMsg);
-					output.textContent = `❌ AI 生成失败：${errorMsg}。${hint}`;
-					badges.innerHTML = '';
-				} finally {
-					isAiLoading = false; // 释放请求锁
-					clearSlowQueryFeedback();
-					setTimeout(() => {
-						setGenerateButtonsLoading(false);
-					}, 100);
-				}
-			};
+			} catch (e) {
+				console.error('AI 生成失败:', e);
+				const errorMsg = e.message || '未知错误';
+				const hint = getAiErrorHint(errorMsg);
+				if (output) output.textContent = `❌ AI 生成失败：${errorMsg}。${hint}`;
+				if (badges) badges.innerHTML = '';
+			} finally {
+				isAiLoading = false; // 释放请求锁
+				clearSlowQueryFeedback();
+				setTimeout(() => {
+					setGenerateButtonsLoading(false);
+				}, 100);
+			}
+		};
 
 		const testAiConnection = async () => {
 			const statusEl = document.getElementById('aiTestStatus');
@@ -1510,6 +1510,50 @@ const devLog = (...args) => {
 				statusEl.dataset.type = 'error';
 			} finally {
 				testBtn.disabled = false;
+			}
+		};
+
+		const updateGenerateButtonState = () => {
+			const goBtn = document.getElementById('go');
+			const goStickyBtn = document.getElementById('goSticky');
+			const aiMode = document.getElementById('aiMode')?.checked;
+
+			if (!goBtn) return;
+
+			if (aiMode) {
+				goBtn.disabled = false;
+				goBtn.innerHTML = '<i class="ri-sparkling-line"></i> 生成押韵 (AI)';
+				goBtn.style.background = 'linear-gradient(135deg, var(--accent), var(--accent-2))';
+				goBtn.classList.remove('error');
+
+				if (goStickyBtn) {
+					goStickyBtn.disabled = false;
+					goStickyBtn.innerHTML = '<i class="ri-sparkling-line"></i> 生成';
+				}
+			} else {
+				goBtn.style.background = ''; // 恢复默认背景
+				if (window.isDictLoading) {
+					goBtn.disabled = true;
+					goBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> 载入中...';
+				} else if (!window.dictLoaded) {
+					goBtn.innerHTML = '<i class="ri-restart-line"></i> 点击加载词库';
+					goBtn.disabled = false;
+					goBtn.style.background = 'linear-gradient(135deg, #fb7185, #fde047)';
+				} else {
+					goBtn.disabled = false;
+					goBtn.innerHTML = '生成押韵';
+					goBtn.classList.remove('error');
+				}
+
+				if (goStickyBtn) {
+					if (window.isDictLoading) {
+						goStickyBtn.disabled = true;
+						goStickyBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i>';
+					} else {
+						goStickyBtn.disabled = false;
+						goStickyBtn.innerHTML = '生成';
+					}
+				}
 			}
 		};
 
@@ -2395,6 +2439,11 @@ const devLog = (...args) => {
 		const init = () => {
 			const goBtn = document.getElementById('go');
 			goBtn.addEventListener('click', () => {
+				const isAi = document.getElementById('aiMode')?.checked;
+				if (isAi) {
+					process();
+					return;
+				}
 				if (window.isDictLoading) return;
 				if (!window.dictLoaded) {
 					loadDict();
@@ -2405,6 +2454,13 @@ const devLog = (...args) => {
 			const goStickyBtn = document.getElementById('goSticky');
 			if (goStickyBtn) {
 				goStickyBtn.addEventListener('click', () => {
+					const isAi = document.getElementById('aiMode')?.checked;
+					if (isAi) {
+						const source = document.getElementById('source');
+						if (source) source.blur();
+						process();
+						return;
+					}
 					if (window.isDictLoading) return;
 					if (!window.dictLoaded) {
 						loadDict();
@@ -2807,49 +2863,59 @@ const devLog = (...args) => {
 				let models = [];
 				switch (provider) {
 					case 'gemini':
-						models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+						models = ['gemini-2.0-flash', 'gemini-2.0-pro-exp-02-05', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 						break;
 					case 'claude':
-						models = ['claude-opus-4.7', 'claude-opus-4.7-thinking', 'claude-sonnet-4.6', 'claude-sonnet-4.5-20250929', 'claude-haiku-4.5-20251001', 'claude-opus-4.5-20251101'];
+						models = ['claude-3-7-sonnet-20250219', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'];
 						break;
 					case 'openai':
-						models = ['gpt-5.5-pro', 'gpt-5.5', 'gpt-5-pro', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'];
+						models = ['gpt-4o-mini', 'gpt-4o', 'o1-mini', 'o1-preview', 'o3-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 						break;
 					case 'deepseek':
-						models = ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-r1', 'deepseek-v3.2', 'deepseek-v3'];
+						models = ['deepseek-chat', 'deepseek-reasoner'];
 						break;
 					case 'siliconflow':
-						models = ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', 'Qwen/Qwen2.5-72B-Instruct', 'GLM-4-9B-Chat'];
+						models = [
+							'deepseek-ai/DeepSeek-V3', 
+							'deepseek-ai/DeepSeek-R1', 
+							'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', 
+							'deepseek-ai/DeepSeek-R1-Distill-Llama-8B', 
+							'Qwen/Qwen2.5-72B-Instruct', 
+							'THUDM/glm-4-9b-chat'
+						];
 						break;
 					case 'moonshot':
-						models = ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-250711', 'moonshot-v1-8k', 'moonshot-v1-32k'];
+						models = ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'];
 						break;
 					case 'groq':
-						models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+						models = ['llama-3.3-70b-specdec', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
 						break;
 					case 'openrouter':
 						models = ['google/gemini-2.0-flash-exp:free', 'deepseek/deepseek-chat', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.3-70b-instruct'];
 						break;
 					case 'zhipu':
-						models = ['glm-5.1', 'glm-5', 'glm-4.6', 'glm-4.5', 'glm-4-flash'];
+						models = ['glm-4-flash', 'glm-4-plus', 'glm-4-air', 'glm-4v-plus'];
 						break;
 					case 'qwen':
-						models = ['qwen3.7-max', 'qwen-max', 'qwen-plus', 'qwen-turbo'];
+						models = ['qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-long'];
 						break;
 					case 'qianfan':
-						models = ['ERNIE-4.0-Turbo-8K', 'ERNIE-3.5-8K', 'ERNIE-Speed-128K', 'ERNIE-Lite-8K'];
+						models = ['ERNIE-Speed-8K', 'ERNIE-Lite-8K', 'ERNIE-4.0-Turbo-8K', 'ERNIE-3.5-8K'];
 						break;
 					case 'hunyuan':
-						models = ['hunyuan-lite', 'hunyuan-standard', 'hunyuan-pro'];
+						models = ['hunyuan-standard', 'hunyuan-lite', 'hunyuan-pro'];
 						break;
 					case 'volcengine':
-						models = ['Doubao-pro-32k', 'Doubao-pro-4k', 'Doubao-lite-4k'];
+						models = ['Doubao-lite-4k', 'Doubao-pro-4k', 'Doubao-pro-32k'];
 						break;
 					case 'lingyi':
 						models = ['yi-lightning', 'yi-large', 'yi-medium'];
 						break;
 					case 'minimax':
-						models = ['MiniMax-M2.7', 'minimax-m2.5', 'abab6.5g-chat'];
+						models = ['abab6.5g-chat', 'abab6.5t-chat', 'abab6.5s-chat', 'abab6-chat'];
+						break;
+					case 'custom':
+						models = [];
 						break;
 				}
 
@@ -2859,16 +2925,12 @@ const devLog = (...args) => {
 						const opt = document.createElement('option');
 						opt.value = m;
 						opt.textContent = m;
-						opt.style.background = '#1e1e24';
-						opt.style.color = 'var(--text)';
 						aiModelSelect.appendChild(opt);
 					});
 
 					const customOpt = document.createElement('option');
 					customOpt.value = 'custom_input';
 					customOpt.textContent = '手动输入...';
-					customOpt.style.background = '#1e1e24';
-					customOpt.style.color = 'var(--text)';
 					aiModelSelect.appendChild(customOpt);
 
 					const savedModelVal = conf.model || getDefaultModel(provider);
@@ -2890,6 +2952,7 @@ const devLog = (...args) => {
 			if (savedAiMode) {
 				dictWarning.style.display = 'none';
 			}
+			updateGenerateButtonState();
 
 			// 初始化 Select 的选中状态
 			if (aiProviderSelect) {
@@ -2935,6 +2998,7 @@ const devLog = (...args) => {
 				const isAi = e.target.checked;
 				dictWarning.style.display = isAi ? 'none' : 'block';
 				localStorage.setItem('AI_MODE', isAi);
+				updateGenerateButtonState();
 				
 				let keyExists = false;
 				try {

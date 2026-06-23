@@ -1178,6 +1178,12 @@ th {
 	-webkit-backdrop-filter: blur(10px);
 }
 
+#aiSettingsModal .settings-item select option {
+	background-color: #1a1525;
+	color: #f1f5f9;
+}
+
+
 #aiSettingsModal .settings-item input[type="text"]:focus,
 #aiSettingsModal .settings-item input[type="password"]:focus,
 #aiSettingsModal .settings-item select:focus {
