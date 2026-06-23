@@ -179,17 +179,46 @@
 			</div>
 			<div class="settings-group">
 				<div class="settings-item">
-					<label for="geminiApiKey">Gemini API Key</label>
-					<input type="password" id="geminiApiKey" placeholder="输入 Gemini API Key"
+					<label for="aiProvider">AI 服务商</label>
+					<select id="aiProvider">
+						<option value="gemini">Google Gemini</option>
+						<option value="claude">Anthropic Claude</option>
+						<option value="openai">OpenAI</option>
+						<option value="deepseek">DeepSeek</option>
+						<option value="siliconflow">SiliconFlow (硅基流动)</option>
+						<option value="moonshot">Moonshot AI (月之暗面)</option>
+						<option value="groq">Groq (极速推理)</option>
+						<option value="openrouter">OpenRouter</option>
+						<option value="zhipu">智谱清言 (GLM)</option>
+						<option value="qwen">通义千问 (DashScope)</option>
+						<option value="qianfan">百度千帆 (文心)</option>
+						<option value="hunyuan">腾讯混元</option>
+						<option value="volcengine">火山引擎 (豆包)</option>
+						<option value="lingyi">零一万物</option>
+						<option value="minimax">MiniMax (海螺)</option>
+						<option value="custom">自定义 (OpenAI 兼容)</option>
+					</select>
+				</div>
+				<div class="settings-item">
+					<label for="aiApiKey" id="aiApiKeyLabel">Gemini API Key</label>
+					<input type="password" id="aiApiKey" placeholder="输入 Gemini API Key"
 						style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
-					<div class="hint">没有 Key？<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer"
+					<div class="hint" id="aiKeyHint">没有 Key？<a href="https://aistudio.google.com/app/apikey" id="aiKeyLink" target="_blank" rel="noopener noreferrer"
 							style="color: var(--accent-2);">点击获取</a></div>
 				</div>
 				<div class="settings-item">
-					<label for="geminiProxy">API 代理地址 (可选)</label>
-					<input type="text" id="geminiProxy" placeholder="例如: https://proxy.com"
+					<label for="aiBaseUrl" id="aiBaseUrlLabel">API 代理地址 (可选)</label>
+					<input type="text" id="aiBaseUrl" placeholder="例如: https://proxy.com"
 						style="min-height: 40px; padding: 8px 12px; font-size: 14px;" />
-					<div class="hint">解决 Failed to fetch 错误。</div>
+					<div class="hint" id="aiBaseUrlHint">解决 Failed to fetch 错误。</div>
+				</div>
+				<div class="settings-item">
+					<label for="aiModelSelect">模型名称</label>
+					<select id="aiModelSelect">
+						<!-- 动态填充 -->
+					</select>
+					<input type="text" id="aiModel" placeholder="输入自定义模型名称"
+						style="display: none; min-height: 40px; padding: 8px 12px; font-size: 14px; margin-top: 8px;" />
 				</div>
 				<div class="settings-item">
 					<button class="btn ghost" style="width: 100%;" id="testAiSettings">测试连接</button>

@@ -1158,7 +1158,9 @@ th {
 	color: var(--text);
 }
 
-#aiSettingsModal .settings-item input[type="text"] {
+#aiSettingsModal .settings-item input[type="text"],
+#aiSettingsModal .settings-item input[type="password"],
+#aiSettingsModal .settings-item select {
 	width: 100%;
 	min-height: 42px;
 	background: rgba(10, 14, 26, 0.42);
@@ -1176,7 +1178,9 @@ th {
 	-webkit-backdrop-filter: blur(10px);
 }
 
-#aiSettingsModal .settings-item input[type="text"]:focus {
+#aiSettingsModal .settings-item input[type="text"]:focus,
+#aiSettingsModal .settings-item input[type="password"]:focus,
+#aiSettingsModal .settings-item select:focus {
 	outline: none;
 	border-color: rgba(34, 211, 238, 0.55);
 	background: rgba(10, 14, 26, 0.52);

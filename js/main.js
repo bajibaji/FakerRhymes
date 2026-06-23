@@ -1155,9 +1155,9 @@ const devLog = (...args) => {
 			return normalized;
 		};
 
-		const requestGemini = async (prompt, apiKey, proxy) => {
+		const requestGemini = async (prompt, apiKey, proxy, model = 'gemini-2.0-flash') => {
 			const baseUrl = getGeminiBaseUrl(proxy);
-			const response = await fetch(`${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+			const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -1178,14 +1178,193 @@ const devLog = (...args) => {
 			return text;
 		};
 
+		const getDefaultBaseUrl = (provider) => {
+			switch (provider) {
+				case 'openai': return 'https://api.openai.com/v1';
+				case 'claude': return 'https://api.anthropic.com';
+				case 'deepseek': return 'https://api.deepseek.com';
+				case 'siliconflow': return 'https://api.siliconflow.cn/v1';
+				case 'moonshot': return 'https://api.moonshot.cn/v1';
+				case 'groq': return 'https://api.groq.com/openai/v1';
+				case 'openrouter': return 'https://openrouter.ai/api/v1';
+				case 'zhipu': return 'https://open.bigmodel.cn/api/paas/v4';
+				case 'qwen': return 'https://dashscope.aliyuncas.com/compatible-mode/v1';
+				case 'qianfan': return 'https://qianfan.baidubce.com/v2';
+				case 'hunyuan': return 'https://api.hunyuan.cloud.tencent.com/v1';
+				case 'volcengine': return 'https://ark.cn-beijing.volces.com/api/v3';
+				case 'lingyi': return 'https://api.lingyiwanwu.com/v1';
+				case 'minimax': return 'https://api.minimax.chat/v1';
+				default: return '';
+			}
+		};
+
+		const getDefaultModel = (provider) => {
+			switch (provider) {
+				case 'gemini': return 'gemini-3.5-flash';
+				case 'claude': return 'claude-sonnet-4.5-20250929';
+				case 'openai': return 'gpt-5-mini';
+				case 'deepseek': return 'deepseek-v4-flash';
+				case 'siliconflow': return 'deepseek-ai/DeepSeek-V3';
+				case 'moonshot': return 'kimi-k2.6';
+				case 'groq': return 'llama-3.3-70b-versatile';
+				case 'openrouter': return 'google/gemini-2.0-flash-exp:free';
+				case 'zhipu': return 'glm-5';
+				case 'qwen': return 'qwen3.7-max';
+				case 'qianfan': return 'ERNIE-4.0-Turbo-8K';
+				case 'hunyuan': return 'hunyuan-standard';
+				case 'volcengine': return 'Doubao-pro-32k';
+				case 'lingyi': return 'yi-lightning';
+				case 'minimax': return 'MiniMax-M2.7';
+				default: return '';
+			}
+		};
+
+		const getProviderDisplayName = (provider) => {
+			switch (provider) {
+				case 'gemini': return 'Google Gemini';
+				case 'claude': return 'Anthropic Claude';
+				case 'openai': return 'OpenAI';
+				case 'deepseek': return 'DeepSeek';
+				case 'siliconflow': return 'SiliconFlow';
+				case 'moonshot': return 'Moonshot AI';
+				case 'groq': return 'Groq';
+				case 'openrouter': return 'OpenRouter';
+				case 'zhipu': return '智谱清言';
+				case 'qwen': return '通义千问';
+				case 'qianfan': return '百度千帆';
+				case 'hunyuan': return '腾讯混元';
+				case 'volcengine': return '火山引擎';
+				case 'lingyi': return '零一万物';
+				case 'minimax': return 'MiniMax';
+				case 'custom': return '自定义 OpenAI 兼容';
+				default: return provider;
+			}
+		};
+
+		const requestAnthropic = async (prompt, apiKey, baseUrl, model) => {
+			const finalBaseUrl = baseUrl || 'https://api.anthropic.com';
+			const normalizedUrl = finalBaseUrl.trim().replace(/\/$/, '');
+			let url = normalizedUrl;
+			if (!url.includes('/v1/messages')) {
+				url = `${url}/v1/messages`;
+			}
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'x-api-key': apiKey,
+					'anthropic-version': '2023-06-01',
+					'dangerously-allow-browser': 'true'
+				},
+				body: JSON.stringify({
+					model: model || 'claude-3-5-sonnet-20241022',
+					messages: [
+						{ role: 'user', content: prompt }
+					],
+					max_tokens: 1024
+				})
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => ({}));
+				throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+			}
+
+			const data = await response.json();
+			const text = data?.content?.[0]?.text?.trim();
+			if (!text) {
+				throw new Error('AI 未返回有效内容');
+			}
+			return text;
+		};
+
+		const requestOpenAiCompatible = async (prompt, apiKey, baseUrl, model) => {
+			if (!baseUrl) {
+				throw new Error('API Base URL 不能为空');
+			}
+			const normalizedUrl = baseUrl.trim().replace(/\/$/, '');
+			let url = normalizedUrl;
+			if (!url.includes('/chat/completions')) {
+				url = `${url}/chat/completions`;
+			}
+			
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${apiKey}`
+				},
+				body: JSON.stringify({
+					model: model,
+					messages: [
+						{ role: 'user', content: prompt }
+					]
+				})
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => ({}));
+				throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+			}
+
+			const data = await response.json();
+			const text = data?.choices?.[0]?.message?.content?.trim();
+			if (!text) {
+				throw new Error('AI 未返回有效内容');
+			}
+			return text;
+		};
+
 		const processAI = async (src, infos, looseness) => {
 			if (isAiLoading) return; // 防止并发请求
-			const apiKey = localStorage.getItem('GEMINI_API_KEY');
-			const proxy = localStorage.getItem('GEMINI_PROXY') || '';
-			if (!apiKey) {
-				alert('请先输入 Gemini API Key');
+
+			let aiConfigs = null;
+			try {
+				aiConfigs = JSON.parse(localStorage.getItem('AI_CONFIGS'));
+			} catch (e) {
+				console.error('读取 AI_CONFIGS 失败:', e);
+			}
+
+			if (!aiConfigs) {
+				const oldKey = localStorage.getItem('GEMINI_API_KEY');
+				const oldProxy = localStorage.getItem('GEMINI_PROXY') || '';
+				if (oldKey) {
+					aiConfigs = {
+						activeProvider: 'gemini',
+						providers: {
+							gemini: { apiKey: oldKey, baseUrl: oldProxy, model: 'gemini-2.0-flash' }
+						}
+					};
+				}
+			}
+
+			if (!aiConfigs) {
+				alert('请先配置 AI 服务商与密钥');
+				const aiSettingsModal = document.getElementById('aiSettingsModal');
+				if (aiSettingsModal) {
+					aiSettingsModal.classList.add('active');
+					aiSettingsModal.setAttribute('aria-hidden', 'false');
+				}
 				return;
 			}
+
+			const provider = aiConfigs.activeProvider || 'gemini';
+			const providerConf = aiConfigs.providers?.[provider] || {};
+			const apiKey = providerConf.apiKey;
+			const baseUrl = providerConf.baseUrl !== undefined ? providerConf.baseUrl : getDefaultBaseUrl(provider);
+			const model = providerConf.model || getDefaultModel(provider);
+
+			if (!apiKey) {
+				alert(`请先配置 ${getProviderDisplayName(provider)} 的 API Key`);
+				const aiSettingsModal = document.getElementById('aiSettingsModal');
+				if (aiSettingsModal) {
+					aiSettingsModal.classList.add('active');
+					aiSettingsModal.setAttribute('aria-hidden', 'false');
+				}
+				return;
+			}
+
 			isAiLoading = true;
 
 			const output = document.getElementById('output');
@@ -1215,7 +1394,14 @@ const devLog = (...args) => {
 6. 严禁生拼硬凑，绝对禁止生成“死词”（如：XX机、XX门等无意义组合）。`;
 
 			try {
-				const text = await requestGemini(prompt, apiKey, proxy);
+				let text;
+				if (provider === 'gemini') {
+					text = await requestGemini(prompt, apiKey, baseUrl, model);
+				} else if (provider === 'claude') {
+					text = await requestAnthropic(prompt, apiKey, baseUrl, model);
+				} else {
+					text = await requestOpenAiCompatible(prompt, apiKey, baseUrl, model);
+				}
 				
 				// 任务过时检查
 				if (mySearchId !== currentSearchId) return;
@@ -1274,12 +1460,22 @@ const devLog = (...args) => {
 		const testAiConnection = async () => {
 			const statusEl = document.getElementById('aiTestStatus');
 			const testBtn = document.getElementById('testAiSettings');
-			const apiKey = document.getElementById('geminiApiKey')?.value.trim();
-			const proxy = document.getElementById('geminiProxy')?.value.trim() || '';
+			
+			const provider = document.getElementById('aiProvider')?.value;
+			const apiKey = document.getElementById('aiApiKey')?.value.trim();
+			const baseUrl = document.getElementById('aiBaseUrl')?.value.trim();
+			const model = document.getElementById('aiModel')?.value.trim();
+			
 			if (!statusEl || !testBtn) return;
 
 			if (!apiKey) {
-				statusEl.textContent = '请先填写 Gemini API Key。';
+				statusEl.textContent = '请先填写 API Key。';
+				statusEl.dataset.type = 'error';
+				return;
+			}
+			
+			if (provider === 'custom' && !baseUrl) {
+				statusEl.textContent = '自定义服务商必须填写 API Base URL。';
 				statusEl.dataset.type = 'error';
 				return;
 			}
@@ -1288,9 +1484,26 @@ const devLog = (...args) => {
 			statusEl.dataset.type = 'info';
 			testBtn.disabled = true;
 			try {
-				await requestGemini('请回复“连接成功”四个字。', apiKey, proxy);
-				statusEl.textContent = '连接成功，API 可用。';
-				statusEl.dataset.type = 'success';
+				const testPrompt = '请回复“连接成功”四个字。';
+				let responseText;
+				
+				if (provider === 'gemini') {
+					responseText = await requestGemini(testPrompt, apiKey, baseUrl, model || 'gemini-2.0-flash');
+				} else if (provider === 'claude') {
+					responseText = await requestAnthropic(testPrompt, apiKey, baseUrl, model || 'claude-3-5-sonnet-20241022');
+				} else {
+					const finalBaseUrl = baseUrl || getDefaultBaseUrl(provider);
+					const finalModel = model || getDefaultModel(provider);
+					responseText = await requestOpenAiCompatible(testPrompt, apiKey, finalBaseUrl, finalModel);
+				}
+				
+				if (responseText && (responseText.includes('成功') || responseText.length > 0)) {
+					statusEl.textContent = '连接成功，API 可用。';
+					statusEl.dataset.type = 'success';
+				} else {
+					statusEl.textContent = '连接失败：未收到有效响应。';
+					statusEl.dataset.type = 'error';
+				}
 			} catch (e) {
 				const errorMsg = e.message || '未知错误';
 				statusEl.textContent = `连接失败：${getAiErrorHint(errorMsg)} (${errorMsg})`;
@@ -2392,27 +2605,351 @@ const devLog = (...args) => {
 			const saveAiSettingsBtn = document.getElementById('saveAiSettings');
 			const testAiSettingsBtn = document.getElementById('testAiSettings');
 			const aiTestStatus = document.getElementById('aiTestStatus');
-			const geminiApiKeyInput = document.getElementById('geminiApiKey');
-			const geminiProxyInput = document.getElementById('geminiProxy');
+			
+			// 新增表单项
+			const aiProviderSelect = document.getElementById('aiProvider');
+			const aiApiKeyInput = document.getElementById('aiApiKey');
+			const aiApiKeyLabel = document.getElementById('aiApiKeyLabel');
+			const aiKeyHint = document.getElementById('aiKeyHint');
+			const aiKeyLink = document.getElementById('aiKeyLink');
+			const aiBaseUrlInput = document.getElementById('aiBaseUrl');
+			const aiBaseUrlLabel = document.getElementById('aiBaseUrlLabel');
+			const aiBaseUrlHint = document.getElementById('aiBaseUrlHint');
+			const aiModelInput = document.getElementById('aiModel');
+			const aiModelSelect = document.getElementById('aiModelSelect');
+
+			// 初始化并做兼容性迁移
+			let aiConfigs = null;
+			try {
+				aiConfigs = JSON.parse(localStorage.getItem('AI_CONFIGS'));
+			} catch (e) {}
+
+			if (!aiConfigs) {
+				const oldKey = localStorage.getItem('GEMINI_API_KEY') || '';
+				const oldProxy = localStorage.getItem('GEMINI_PROXY') || '';
+				aiConfigs = {
+					activeProvider: 'gemini',
+					providers: {
+						gemini: { apiKey: oldKey, baseUrl: oldProxy, model: 'gemini-3.5-flash' },
+						claude: { apiKey: '', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4.5-20250929' },
+						openai: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-mini' },
+						deepseek: { apiKey: '', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
+						siliconflow: { apiKey: '', baseUrl: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3' },
+						moonshot: { apiKey: '', baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2.6' },
+						groq: { apiKey: '', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+						openrouter: { apiKey: '', baseUrl: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.0-flash-exp:free' },
+						zhipu: { apiKey: '', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-5' },
+						qwen: { apiKey: '', baseUrl: 'https://dashscope.aliyuncas.com/compatible-mode/v1', model: 'qwen3.7-max' },
+						qianfan: { apiKey: '', baseUrl: 'https://qianfan.baidubce.com/v2', model: 'ERNIE-4.0-Turbo-8K' },
+						hunyuan: { apiKey: '', baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', model: 'hunyuan-standard' },
+						volcengine: { apiKey: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: 'Doubao-pro-32k' },
+						lingyi: { apiKey: '', baseUrl: 'https://api.lingyiwanwu.com/v1', model: 'yi-lightning' },
+						minimax: { apiKey: '', baseUrl: 'https://api.minimax.chat/v1', model: 'MiniMax-M2.7' },
+						custom: { apiKey: '', baseUrl: '', model: '' }
+					}
+				};
+				localStorage.setItem('AI_CONFIGS', JSON.stringify(aiConfigs));
+			}
+
+			// 补充缺失的服务商
+			const defaultProviders = [
+				'gemini', 'claude', 'openai', 'deepseek', 'siliconflow', 'moonshot',
+				'groq', 'openrouter', 'zhipu', 'qwen', 'qianfan', 'hunyuan',
+				'volcengine', 'lingyi', 'minimax', 'custom'
+			];
+			if (!aiConfigs.providers) aiConfigs.providers = {};
+			defaultProviders.forEach(p => {
+				if (!aiConfigs.providers[p]) {
+					aiConfigs.providers[p] = {
+						apiKey: '',
+						baseUrl: getDefaultBaseUrl(p),
+						model: getDefaultModel(p)
+					};
+				}
+			});
+
+			// 将模型列表更新及页面标签切换封装成函数
+			const updateProviderUI = (provider) => {
+				const conf = aiConfigs.providers[provider] || {};
+				
+				// 填充输入框值
+				aiApiKeyInput.value = conf.apiKey || '';
+				aiBaseUrlInput.value = conf.baseUrl !== undefined ? conf.baseUrl : getDefaultBaseUrl(provider);
+				aiModelInput.value = conf.model || getDefaultModel(provider);
+				
+				// 修改 Label & Placeholder & Hint & Key 链接
+				let keyLabel = 'API Key';
+				let keyPlaceholder = '输入 API Key';
+				let urlLabel = 'API Base URL (可选)';
+				let urlPlaceholder = '请输入 API 接口地址';
+				let urlHint = '可选，若为空则默认使用官方接口。';
+				let showKeyHint = true;
+				let keyHref = '';
+
+				switch (provider) {
+					case 'gemini':
+						keyLabel = 'Gemini API Key';
+						keyPlaceholder = '输入 Gemini API Key';
+						urlLabel = 'API 代理地址 (可选)';
+						urlPlaceholder = '例如: https://proxy.com';
+						urlHint = '解决 Failed to fetch 错误。';
+						keyHref = 'https://aistudio.google.com/app/apikey';
+						break;
+					case 'claude':
+						keyLabel = 'Claude API Key';
+						keyPlaceholder = '输入 Anthropic Claude API Key';
+						urlLabel = 'API Base URL / 代理地址 (可选)';
+						urlPlaceholder = '例如: https://api.anthropic.com';
+						urlHint = '可选，直连时空着即可，也支持填入代理端点。';
+						keyHref = 'https://console.anthropic.com/';
+						break;
+					case 'openai':
+						keyLabel = 'OpenAI API Key';
+						keyPlaceholder = '输入 OpenAI API Key';
+						urlPlaceholder = '例如: https://api.openai.com/v1';
+						keyHref = 'https://platform.openai.com/api-keys';
+						break;
+					case 'deepseek':
+						keyLabel = 'DeepSeek API Key';
+						keyPlaceholder = '输入 DeepSeek API Key';
+						urlPlaceholder = '例如: https://api.deepseek.com';
+						keyHref = 'https://platform.deepseek.com/api_keys';
+						break;
+					case 'siliconflow':
+						keyLabel = 'SiliconFlow API Key';
+						keyPlaceholder = '输入 SiliconFlow API Key';
+						urlPlaceholder = '例如: https://api.siliconflow.cn/v1';
+						keyHref = 'https://siliconflow.cn/zh-cn/';
+						break;
+					case 'moonshot':
+						keyLabel = 'Moonshot API Key';
+						keyPlaceholder = '输入 Moonshot API Key';
+						urlPlaceholder = '例如: https://api.moonshot.cn/v1';
+						keyHref = 'https://platform.moonshot.cn/console/api-keys';
+						break;
+					case 'groq':
+						keyLabel = 'Groq API Key';
+						keyPlaceholder = '输入 Groq API Key';
+						urlPlaceholder = '例如: https://api.groq.com/openai/v1';
+						keyHref = 'https://console.groq.com/keys';
+						break;
+					case 'openrouter':
+						keyLabel = 'OpenRouter API Key';
+						keyPlaceholder = '输入 OpenRouter API Key';
+						urlPlaceholder = '例如: https://openrouter.ai/api/v1';
+						keyHref = 'https://openrouter.ai/keys';
+						break;
+					case 'zhipu':
+						keyLabel = '智谱 GLM API Key';
+						keyPlaceholder = '输入智谱清言 API Key';
+						urlPlaceholder = '例如: https://open.bigmodel.cn/api/paas/v4';
+						keyHref = 'https://open.bigmodel.cn/';
+						break;
+					case 'qwen':
+						keyLabel = 'DashScope API Key (通义千问)';
+						keyPlaceholder = '输入阿里灵积 API Key';
+						urlPlaceholder = '例如: https://dashscope.aliyuncas.com/compatible-mode/v1';
+						keyHref = 'https://dashscope.console.aliyun.com/apiKey';
+						break;
+					case 'qianfan':
+						keyLabel = '百度千帆 API Key';
+						keyPlaceholder = '输入百度智能云千帆 API Key';
+						urlPlaceholder = '例如: https://qianfan.baidubce.com/v2';
+						keyHref = 'https://console.bce.baidu.com/qianfan/ais/console/applicationManage/application';
+						break;
+					case 'hunyuan':
+						keyLabel = '腾讯混元 API Key';
+						keyPlaceholder = '输入腾讯云混元 API Key';
+						urlPlaceholder = '例如: https://api.hunyuan.cloud.tencent.com/v1';
+						keyHref = 'https://console.cloud.tencent.com/hunyuan/api-key';
+						break;
+					case 'volcengine':
+						keyLabel = '火山引擎 API Key (豆包)';
+						keyPlaceholder = '输入字节跳动火山引擎 API Key';
+						urlPlaceholder = '例如: https://ark.cn-beijing.volces.com/api/v3';
+						keyHref = 'https://console.volcengine.com/ark/query/api_key';
+						break;
+					case 'lingyi':
+						keyLabel = '零一万物 API Key';
+						keyPlaceholder = '输入 01.AI API Key';
+						urlPlaceholder = '例如: https://api.lingyiwanwu.com/v1';
+						keyHref = 'https://platform.lingyiwanwu.com/apikeys';
+						break;
+					case 'minimax':
+						keyLabel = 'MiniMax API Key';
+						keyPlaceholder = '输入海螺大模型 API Key';
+						urlPlaceholder = '例如: https://api.minimax.chat/v1';
+						keyHref = 'https://platform.minimaxi.com/user-center/basic-information/interface-key';
+						break;
+					default:
+						keyLabel = 'API Key';
+						keyPlaceholder = '输入 API Key';
+						urlLabel = 'API Base URL (必填)';
+						urlPlaceholder = '例如: https://api.yourproxy.com/v1';
+						urlHint = '自定义大模型厂商的 API 接口地址。';
+						showKeyHint = false;
+						break;
+				}
+
+				aiApiKeyLabel.textContent = keyLabel;
+				aiApiKeyInput.placeholder = keyPlaceholder;
+				aiBaseUrlLabel.textContent = urlLabel;
+				aiBaseUrlInput.placeholder = urlPlaceholder;
+				aiBaseUrlHint.textContent = urlHint;
+				if (showKeyHint) {
+					aiKeyHint.style.display = 'block';
+					aiKeyLink.href = keyHref;
+				} else {
+					aiKeyHint.style.display = 'none';
+				}
+
+				// 动态更新 Datalist 模型名称
+				let models = [];
+				switch (provider) {
+					case 'gemini':
+						models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+						break;
+					case 'claude':
+						models = ['claude-opus-4.7', 'claude-opus-4.7-thinking', 'claude-sonnet-4.6', 'claude-sonnet-4.5-20250929', 'claude-haiku-4.5-20251001', 'claude-opus-4.5-20251101'];
+						break;
+					case 'openai':
+						models = ['gpt-5.5-pro', 'gpt-5.5', 'gpt-5-pro', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'];
+						break;
+					case 'deepseek':
+						models = ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-r1', 'deepseek-v3.2', 'deepseek-v3'];
+						break;
+					case 'siliconflow':
+						models = ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', 'Qwen/Qwen2.5-72B-Instruct', 'GLM-4-9B-Chat'];
+						break;
+					case 'moonshot':
+						models = ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-250711', 'moonshot-v1-8k', 'moonshot-v1-32k'];
+						break;
+					case 'groq':
+						models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+						break;
+					case 'openrouter':
+						models = ['google/gemini-2.0-flash-exp:free', 'deepseek/deepseek-chat', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.3-70b-instruct'];
+						break;
+					case 'zhipu':
+						models = ['glm-5.1', 'glm-5', 'glm-4.6', 'glm-4.5', 'glm-4-flash'];
+						break;
+					case 'qwen':
+						models = ['qwen3.7-max', 'qwen-max', 'qwen-plus', 'qwen-turbo'];
+						break;
+					case 'qianfan':
+						models = ['ERNIE-4.0-Turbo-8K', 'ERNIE-3.5-8K', 'ERNIE-Speed-128K', 'ERNIE-Lite-8K'];
+						break;
+					case 'hunyuan':
+						models = ['hunyuan-lite', 'hunyuan-standard', 'hunyuan-pro'];
+						break;
+					case 'volcengine':
+						models = ['Doubao-pro-32k', 'Doubao-pro-4k', 'Doubao-lite-4k'];
+						break;
+					case 'lingyi':
+						models = ['yi-lightning', 'yi-large', 'yi-medium'];
+						break;
+					case 'minimax':
+						models = ['MiniMax-M2.7', 'minimax-m2.5', 'abab6.5g-chat'];
+						break;
+				}
+
+				if (aiModelSelect) {
+					aiModelSelect.innerHTML = '';
+					models.forEach(m => {
+						const opt = document.createElement('option');
+						opt.value = m;
+						opt.textContent = m;
+						opt.style.background = '#1e1e24';
+						opt.style.color = 'var(--text)';
+						aiModelSelect.appendChild(opt);
+					});
+
+					const customOpt = document.createElement('option');
+					customOpt.value = 'custom_input';
+					customOpt.textContent = '手动输入...';
+					customOpt.style.background = '#1e1e24';
+					customOpt.style.color = 'var(--text)';
+					aiModelSelect.appendChild(customOpt);
+
+					const savedModelVal = conf.model || getDefaultModel(provider);
+					if (models.includes(savedModelVal)) {
+						aiModelSelect.value = savedModelVal;
+						aiModelInput.value = savedModelVal;
+						aiModelInput.style.display = 'none';
+					} else {
+						aiModelSelect.value = 'custom_input';
+						aiModelInput.value = savedModelVal;
+						aiModelInput.style.display = 'block';
+					}
+				}
+			};
 
 			// Load saved AI settings
 			const savedAiMode = localStorage.getItem('AI_MODE') === 'true';
-			const savedApiKey = localStorage.getItem('GEMINI_API_KEY') || '';
-			const savedProxy = localStorage.getItem('GEMINI_PROXY') || '';
-			
 			aiModeCheckbox.checked = savedAiMode;
-			geminiApiKeyInput.value = savedApiKey;
-			geminiProxyInput.value = savedProxy;
 			if (savedAiMode) {
 				dictWarning.style.display = 'none';
-				// loadDictBtn removed
+			}
+
+			// 初始化 Select 的选中状态
+			if (aiProviderSelect) {
+				aiProviderSelect.value = aiConfigs.activeProvider || 'gemini';
+				updateProviderUI(aiProviderSelect.value);
+				
+				aiProviderSelect.addEventListener('change', (e) => {
+					const prevProvider = aiConfigs.activeProvider;
+					if (aiConfigs.providers[prevProvider]) {
+						aiConfigs.providers[prevProvider].apiKey = aiApiKeyInput.value.trim();
+						aiConfigs.providers[prevProvider].baseUrl = aiBaseUrlInput.value.trim();
+						aiConfigs.providers[prevProvider].model = aiModelInput.value.trim();
+					}
+					
+					aiConfigs.activeProvider = e.target.value;
+					updateProviderUI(e.target.value);
+				});
+			}
+
+			if (aiModelSelect) {
+				aiModelSelect.addEventListener('change', (e) => {
+					if (e.target.value === 'custom_input') {
+						aiModelInput.style.display = 'block';
+						if (aiModelInput.value === 'custom_input') {
+							aiModelInput.value = '';
+						}
+					} else {
+						aiModelInput.style.display = 'none';
+						aiModelInput.value = e.target.value;
+					}
+				});
+			}
+
+			if (aiModelInput) {
+				aiModelInput.addEventListener('input', (e) => {
+					if (aiModelSelect && aiModelSelect.value !== 'custom_input') {
+						aiModelSelect.value = 'custom_input';
+					}
+				});
 			}
 
 			aiModeCheckbox.addEventListener('change', (e) => {
 				const isAi = e.target.checked;
 				dictWarning.style.display = isAi ? 'none' : 'block';
 				localStorage.setItem('AI_MODE', isAi);
-				if (isAi && !localStorage.getItem('GEMINI_API_KEY')) {
+				
+				let keyExists = false;
+				try {
+					const configs = JSON.parse(localStorage.getItem('AI_CONFIGS'));
+					const active = configs.activeProvider;
+					if (configs.providers?.[active]?.apiKey) {
+						keyExists = true;
+					}
+				} catch (err) {}
+				
+				if (!keyExists) {
+					keyExists = !!localStorage.getItem('GEMINI_API_KEY');
+				}
+				
+				if (isAi && !keyExists) {
 					aiSettingsModal.classList.add('active');
 					aiSettingsModal.setAttribute('aria-hidden', 'false');
 				}
@@ -2424,6 +2961,10 @@ const devLog = (...args) => {
 				aiSettingsModal.setAttribute('aria-hidden', 'false');
 				if (aiTestStatus) {
 					aiTestStatus.textContent = '';
+				}
+				if (aiProviderSelect) {
+					aiProviderSelect.value = aiConfigs.activeProvider || 'gemini';
+					updateProviderUI(aiProviderSelect.value);
 				}
 			});
 
@@ -2438,8 +2979,23 @@ const devLog = (...args) => {
 			});
 
 			saveAiSettingsBtn.addEventListener('click', () => {
-				localStorage.setItem('GEMINI_API_KEY', geminiApiKeyInput.value.trim());
-				localStorage.setItem('GEMINI_PROXY', geminiProxyInput.value.trim());
+				const provider = aiProviderSelect ? aiProviderSelect.value : 'gemini';
+				aiConfigs.activeProvider = provider;
+				
+				if (!aiConfigs.providers[provider]) {
+					aiConfigs.providers[provider] = {};
+				}
+				aiConfigs.providers[provider].apiKey = aiApiKeyInput.value.trim();
+				aiConfigs.providers[provider].baseUrl = aiBaseUrlInput.value.trim();
+				aiConfigs.providers[provider].model = aiModelInput.value.trim();
+				
+				localStorage.setItem('AI_CONFIGS', JSON.stringify(aiConfigs));
+				
+				if (provider === 'gemini') {
+					localStorage.setItem('GEMINI_API_KEY', aiConfigs.providers.gemini.apiKey);
+					localStorage.setItem('GEMINI_PROXY', aiConfigs.providers.gemini.baseUrl);
+				}
+
 				if (aiTestStatus) {
 					aiTestStatus.textContent = '设置已保存。';
 					aiTestStatus.dataset.type = 'success';
