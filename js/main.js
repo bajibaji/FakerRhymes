@@ -6,8 +6,9 @@
 		const finalToCode = {
 			'iong': '0', 'uang': '1', 'iang': '2', 'ueng': '3', 'uan': '4', 'ian': '5', 'uen': '6', 'iao': '7', 'uai': '8',
 			'ang': '9', 'eng': 'a', 'ing': 'b', 'ong': 'c', 'ai': 'd', 'ei': 'e', 'ao': 'f', 'ou': 'g', 'an': 'h', 'en': 'i',
-			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 'ui': 'r', 'er': 's',
-			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y'
+			'in': 'j', 'un': 'k', 'vn': 'l', 'ia': 'm', 'ua': 'n', 'uo': 'o', 'ie': 'p', 'ue': 'q', 've': 'q', 'ui': 'r', 'er': 's',
+			'a': 't', 'o': 'u', 'e': 'v', 'i': 'w', 'u': 'x', 'v': 'y', 'van': 'B', 'i-flat': 'z', 'i-retro': 'A', 'ü': 'y',
+			'iu': 'g', 'iou': 'g'
 		};
 
 		function encodeKey(key) {
@@ -208,11 +209,17 @@ const devLog = (...args) => {
 				setTopProgress(80);
 				globalDictText = await response.text();
 
+				// 统计词库总数与歌词词语数量
+				const commaCount = (globalDictText.match(/,/g) || []).length;
+				const lineCount = (globalDictText.match(/\n/g) || []).length + (globalDictText.length > 0 ? 1 : 0);
+				const totalWords = commaCount + lineCount;
+				const lyricCount = (globalDictText.match(/\*/g) || []).length;
+
 				window.dictLoaded = true;
 				window.isDictLoading = false;
 				localStorage.setItem('ONLINE_DICT_TIME', String(Date.now()));
-				localStorage.setItem('ONLINE_DICT_COUNT', '7000+');
-				localStorage.setItem('ONLINE_DICT_SOURCE', '本地极速文本词库');
+				localStorage.setItem('ONLINE_DICT_COUNT', String(totalWords));
+				localStorage.setItem('ONLINE_DICT_LYRIC_COUNT', String(lyricCount));
 				localStorage.setItem('DICT_ENCODING_VERSION', DICT_ENCODING_VERSION);
 				
 				setDictLoadStatus('词库已就绪，可离线使用。', 'success');
@@ -286,8 +293,8 @@ const devLog = (...args) => {
 			const goBtn = document.getElementById('go');
 			
 			if (cachedTime) {
-				const count = localStorage.getItem('ONLINE_DICT_COUNT') || '7000+';
-				const source = localStorage.getItem('ONLINE_DICT_SOURCE') || '核心词库';
+				const count = localStorage.getItem('ONLINE_DICT_COUNT') || '?';
+				const lyricCount = localStorage.getItem('ONLINE_DICT_LYRIC_COUNT') || '?';
 				const date = new Date(Number(cachedTime));
 				
 				if (goBtn) {
@@ -297,8 +304,9 @@ const devLog = (...args) => {
 				window.dictLoaded = true;
 				
 				// loadDictBtn removed
+				const fmtNum = (v) => isNaN(Number(v)) ? String(v) : Number(v).toLocaleString();
 				dictStatus.style.display = 'block';
-				dictStatusText.textContent = `📖 词库：${count} 个汉字（${source}） | ${date.toLocaleString('zh-CN')}`;
+				dictStatusText.textContent = `词库：共 ${fmtNum(count)} 个词语（歌词 ${fmtNum(lyricCount)} 个） | ${date.toLocaleString('zh-CN')}`;
 				setDictLoadStatus('检测到本地词库缓存，可直接使用。', 'success');
 			} else {
 				if (goBtn) {
@@ -314,7 +322,7 @@ const devLog = (...args) => {
 			if (!phrases || !Array.isArray(phrases) || !type || type === 'all') return phrases;
 			return phrases.filter(phrase => {
 				if (!phrase) return false;
-				const lastChar = phrase.slice(-1);
+				const lastChar = phrase.endsWith('*') ? phrase.slice(-2, -1) : phrase.slice(-1);
 				const info = toInfo(lastChar);
 				if (!info || info.tone === '-') return false;
 				const tone = Number(info.tone);
@@ -625,7 +633,7 @@ const devLog = (...args) => {
 			
 			// 辅助：向 matchedByWordCount 插入一条结果
 			const addMatch = (phrase) => {
-				const phraseLen = phrase.length;
+				const phraseLen = phrase.endsWith('*') ? phrase.length - 1 : phrase.length;
 				if (!matchedByWordCount[phraseLen]) matchedByWordCount[phraseLen] = new Set();
 				matchedByWordCount[phraseLen].add(phrase);
 			};
@@ -789,7 +797,8 @@ const devLog = (...args) => {
 					if (shorterResult.moreLengths && shorterResult.moreLengths.length > 0) {
 						console.log(`[Debug] Recovering ${shorterResult.moreLengths.length} longer words from degraded query...`);
 						for (const phrase of shorterResult.moreLengths) {
-							const pLen = Array.from(phrase).length;
+							const cleanPhrase = phrase.endsWith('*') ? phrase.slice(0, -1) : phrase;
+							const pLen = Array.from(cleanPhrase).length;
 							
 							// 如果这个长词的长度等于原始查询长度，把它算作“同长匹配”
 							if (pLen === sourceLength) {
@@ -867,6 +876,9 @@ const devLog = (...args) => {
 
 		// 检查候选短语是否逐字匹配源词的韵脚，并返回匹配等级 (0: strict, 1: medium, 2: loose, -1: mismatch)
 		const getPhraseMatchTier = (phrase, sourceInfos, looseness) => {
+			if (typeof phrase === 'string' && phrase.endsWith('*')) {
+				phrase = phrase.slice(0, -1);
+			}
 			const tierLimit = getLoosenessTier(looseness);
 			const chars = Array.from(phrase);
 			
@@ -1269,8 +1281,10 @@ const devLog = (...args) => {
 				const customSet = new Set(customStr ? JSON.parse(customStr) : []);
 
 				matchesWithTier.sort((a, b) => {
-					const aIsCustom = customSet.has(a.phrase);
-					const bIsCustom = customSet.has(b.phrase);
+					const cleanA = a.phrase.endsWith('*') ? a.phrase.slice(0, -1) : a.phrase;
+					const cleanB = b.phrase.endsWith('*') ? b.phrase.slice(0, -1) : b.phrase;
+					const aIsCustom = customSet.has(cleanA);
+					const bIsCustom = customSet.has(cleanB);
 					if (aIsCustom && !bIsCustom) return -1;
 					if (!aIsCustom && bIsCustom) return 1;
 					return a.tier - b.tier;
@@ -1313,7 +1327,8 @@ const devLog = (...args) => {
 						};
 					});
 				} else {
-					const firstPhrase = Array.from(ranked[0]); // 第一条作为默认生成
+					const cleanPhraseStr = ranked[0].endsWith('*') ? ranked[0].slice(0, -1) : ranked[0];
+					const firstPhrase = Array.from(cleanPhraseStr); // 第一条作为默认生成
 					
 					newInfos = tempInfosWithOverrides.map((info, idx) => {
 						const oldState = oldInfos[idx] || {};
@@ -1333,7 +1348,8 @@ const devLog = (...args) => {
 						// 为这个位置的所有候选词收集第 idx 个字符
 						const charCandidates = [];
 						for (const phrase of ranked) {
-							const chars = Array.from(phrase);
+							const cleanPhrase = phrase.endsWith('*') ? phrase.slice(0, -1) : phrase;
+							const chars = Array.from(cleanPhrase);
 							if (idx < chars.length) {
 								const char = chars[idx];
 								if (!charCandidates.includes(char)) {
@@ -1565,13 +1581,17 @@ const devLog = (...args) => {
 				
 				// 1. 处理主结果 (text)
 				if (text) {
-					resultsWithTier.push({ phrase: text, tier: getPhraseMatchTier(text, infos, looseness) });
+					const cleanText = text.endsWith('*') ? text.slice(0, -1) : text;
+					if (cleanText !== userInput) {
+						resultsWithTier.push({ phrase: text, tier: getPhraseMatchTier(text, infos, looseness) });
+					}
 				}
 				
 				// 2. 处理字典中的其他相同字数结果
 				if (dictResult && dictResult.sameLength && dictResult.sameLength.length > 0) {
 					for (const phrase of dictResult.sameLength) {
-						if (phrase !== text) {
+						const cleanPhrase = phrase.endsWith('*') ? phrase.slice(0, -1) : phrase;
+						if (cleanPhrase !== userInput && phrase !== text) {
 							const tier = skipFilter ? 0 : getPhraseMatchTier(phrase, infos, looseness);
 							if (tier !== -1) {
 								if (!resultsWithTier.some(r => r.phrase === phrase)) {
@@ -1587,10 +1607,20 @@ const devLog = (...args) => {
 				const customSet = new Set(customStr ? JSON.parse(customStr) : []);
 
 				resultsWithTier.sort((a, b) => {
-					const aIsCustom = customSet.has(a.phrase);
-					const bIsCustom = customSet.has(b.phrase);
+					const cleanA = a.phrase.endsWith('*') ? a.phrase.slice(0, -1) : a.phrase;
+					const cleanB = b.phrase.endsWith('*') ? b.phrase.slice(0, -1) : b.phrase;
+					const aIsCustom = customSet.has(cleanA);
+					const bIsCustom = customSet.has(cleanB);
 					if (aIsCustom && !bIsCustom) return -1;
 					if (!aIsCustom && bIsCustom) return 1;
+					if (aIsCustom && bIsCustom) return a.tier - b.tier;
+					
+					// 歌词词优先
+					const aIsLyric = a.phrase.endsWith('*');
+					const bIsLyric = b.phrase.endsWith('*');
+					if (aIsLyric && !bIsLyric) return -1;
+					if (!aIsLyric && bIsLyric) return 1;
+					
 					return a.tier - b.tier;
 				});
 
@@ -1621,12 +1651,21 @@ const devLog = (...args) => {
 				output.innerHTML = '';
 				resultsWithTier.forEach((item, idx) => {
 					const span = document.createElement('span');
-					span.textContent = item.phrase;
+					let displayPhrase = item.phrase;
+					let isLyric = false;
+					if (item.phrase.endsWith('*')) {
+						displayPhrase = item.phrase.slice(0, -1);
+						isLyric = true;
+					}
+					span.textContent = displayPhrase;
 					
-					// 设置不同等级的颜色 (更亮、更高对比度的配色方案，自定义词用草绿色标识)
-					if (customSet.has(item.phrase)) {
+					// 设置不同等级的颜色
+					if (customSet.has(displayPhrase)) {
 						span.style.color = '#4ade80'; // 自定义词：草绿色
 						span.title = '自定义词库词汇';
+					} else if (isLyric) {
+						span.style.color = '#f472b6'; // 歌词词：淡粉色
+						span.title = '歌词语料词汇';
 					} else if (item.tier === 0) {
 						span.style.color = '#d7c4ff'; // 严格：亮紫色
 						span.title = '严格匹配 (同韵同调)';
@@ -1693,7 +1732,7 @@ const devLog = (...args) => {
 				}
 
 				// 过滤重复的词并进行一致性过滤
-				const uniqueTailMatches = [];
+				let uniqueTailMatches = [];
 				const seen = new Set();
 				
 				moreMatches.forEach(phrase => {
@@ -1711,16 +1750,50 @@ const devLog = (...args) => {
 					uniqueTailMatches.push(phrase);
 				});
 				
+				// 用户要求：更多匹配结果中，同长度且结尾2个字相同的词只能随机保留一个
+				const groupedByLenAndTail = new Map();
+				const shortMatches = [];
+				uniqueTailMatches.forEach(phrase => {
+					const cleanPhrase = phrase.endsWith('*') ? phrase.slice(0, -1) : phrase;
+					if (cleanPhrase.length < 2) {
+						shortMatches.push(phrase);
+					} else {
+						const tail = cleanPhrase.slice(-2);
+						const groupKey = `${cleanPhrase.length}_${tail}`;
+						if (!groupedByLenAndTail.has(groupKey)) {
+							groupedByLenAndTail.set(groupKey, []);
+						}
+						groupedByLenAndTail.get(groupKey).push(phrase);
+					}
+				});
+				
+				const filteredMatches = [...shortMatches];
+				groupedByLenAndTail.forEach((phrases) => {
+					const randomIndex = Math.floor(Math.random() * phrases.length);
+					filteredMatches.push(phrases[randomIndex]);
+				});
+				uniqueTailMatches = filteredMatches;
+				
 				// 按字数排序，自定义词优先
 				const customStr = localStorage.getItem('CUSTOM_RHYME_BANK');
 				const customSet = new Set(customStr ? JSON.parse(customStr) : []);
 
 				uniqueTailMatches.sort((a, b) => {
-					const aIsCustom = customSet.has(a);
-					const bIsCustom = customSet.has(b);
+					const cleanA = a.endsWith('*') ? a.slice(0, -1) : a;
+					const cleanB = b.endsWith('*') ? b.slice(0, -1) : b;
+					const aIsCustom = customSet.has(cleanA);
+					const bIsCustom = customSet.has(cleanB);
 					if (aIsCustom && !bIsCustom) return -1;
 					if (!aIsCustom && bIsCustom) return 1;
-					return a.length - b.length;
+					if (aIsCustom && bIsCustom) return cleanA.length - cleanB.length;
+					
+					// 歌词词优先
+					const aIsLyric = a.endsWith('*');
+					const bIsLyric = b.endsWith('*');
+					if (aIsLyric && !bIsLyric) return -1;
+					if (!aIsLyric && bIsLyric) return 1;
+					
+					return cleanA.length - cleanB.length;
 				});
 
 				matchedResultsList.innerHTML = '';
@@ -1731,20 +1804,32 @@ const devLog = (...args) => {
 				const displayMatches = uniqueTailMatches.slice(0, 200);
 
 				displayMatches.forEach(phrase => {
-					if (phrase && !phrase.includes(userInput)) {
+					const cleanPhrase = phrase.endsWith('*') ? phrase.slice(0, -1) : phrase;
+					if (phrase && cleanPhrase !== userInput) {
 						const div = document.createElement('div');
 						div.className = 'match-item';
-						div.textContent = phrase;
-						div.dataset.length = phrase.length;
+						let displayPhrase = phrase;
+						let isLyric = false;
+						if (phrase.endsWith('*')) {
+							displayPhrase = phrase.slice(0, -1);
+							isLyric = true;
+						}
+						div.textContent = displayPhrase;
+						div.dataset.length = displayPhrase.length;
 						
 						if (customSet.has(phrase)) {
 							div.style.color = '#4ade80'; // 自定义词：草绿色
 							div.style.borderColor = 'rgba(74, 222, 128, 0.4)';
 							div.style.background = 'rgba(74, 222, 128, 0.08)';
 							div.title = '自定义词库词汇';
+						} else if (isLyric) {
+							div.style.color = '#f472b6'; // 淡粉色
+							div.style.borderColor = 'rgba(244, 114, 182, 0.4)';
+							div.style.background = 'rgba(244, 114, 182, 0.08)';
+							div.title = '歌词语料词汇';
 						}
 						div.addEventListener('click', () => {
-							document.getElementById('source').value = phrase;
+							document.getElementById('source').value = displayPhrase;
 							process();
 						});
 						matchedResultsList.appendChild(div);
@@ -2188,12 +2273,14 @@ const devLog = (...args) => {
 				showStats: function() {
 					const stats = localStorage.getItem('ONLINE_DICT_STATS');
 					const cache = localStorage.getItem('ONLINE_DICT_CACHE');
-					const source = localStorage.getItem('ONLINE_DICT_SOURCE');
+					const lyricCount = localStorage.getItem('ONLINE_DICT_LYRIC_COUNT') || '?';
 					const time = localStorage.getItem('ONLINE_DICT_TIME');
 					
 					console.clear();
 					console.log('%c词库统计信息', 'font-size:16px; font-weight:bold; color:#7c3aed');
-					console.log('来源:', source || '未加载');
+					const totalCount = localStorage.getItem('ONLINE_DICT_COUNT') || '?';
+					console.log('总词数:', Number(totalCount).toLocaleString ? Number(totalCount).toLocaleString() : totalCount);
+					console.log('歌词词数:', Number(lyricCount).toLocaleString ? Number(lyricCount).toLocaleString() : lyricCount);
 					console.log('加载时间:', time ? new Date(parseInt(time)).toLocaleString('zh-CN') : '未加载');
 					
 					if (cache) {
