@@ -37,7 +37,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html custom.html manifest.json icon.svg service-worker.js _site/
-          cp dict_part_*.json _site/
+          cp dict_part*.bin _site/
           cp -R css js _site/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
