@@ -78,7 +78,7 @@ const devLog = (...args) => {
 			
 			// 流式加载、导入或错误时红色加粗显示（用 setProperty important 防 CSS 覆盖）
 			if (msg && (msg.includes('正在') || msg.includes('载入') || msg.includes('导入') || type === 'error')) {
-				el.style.setProperty('color', '#ef4444', 'important');
+				el.style.setProperty('color', '#fb7185', 'important');
 				el.style.setProperty('font-weight', 'bold', 'important');
 			} else {
 				el.style.setProperty('color', '', '');
@@ -381,13 +381,13 @@ const devLog = (...args) => {
 				if (btn) {
 					btn.innerHTML = '<i class="ri-restart-line"></i> 点击重试加载';
 					btn.disabled = false;
-					btn.style.background = 'linear-gradient(135deg, #ef4444, #f97316)';
+					btn.style.background = 'linear-gradient(135deg, #fb7185, #fde047)';
 				}
 
 				const warning = document.getElementById('dictWarning');
 				if (warning) {
 					warning.innerHTML = '<i class="ri-error-warning-fill" style="margin-right:2px;"></i> 词库未就绪，点击按钮重试';
-					warning.style.color = '#ef4444';
+					warning.style.color = '#fb7185';
 					warning.style.display = 'block';
 				}
 			}

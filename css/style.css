@@ -40,8 +40,8 @@
 }
 
 .top-progress-bar.error {
-	background: linear-gradient(90deg, #ef4444, #f97316);
-	box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+	background: linear-gradient(90deg, #fb7185, #fde047);
+	box-shadow: 0 0 8px rgba(251, 113, 133, 0.4);
 }
 
 .output span {
@@ -190,7 +190,7 @@
 
 :root {
 	--bg: #0f0518;
-	--panel: rgba(17, 24, 39, 0.6);
+	--panel: rgba(20, 10, 36, 0.65);
 	--card: rgba(11, 18, 32, 0.5);
 	--text: #f1f5f9;
 	--muted: #94a3b8;
@@ -717,7 +717,7 @@ a.btn.ghost.small[href="custom.html"] i {
 .match-item {
 	padding: 8px 6px;
 	background: var(--card);
-	border: 1px solid var(--border);
+	border: 1px solid rgba(255, 255, 255, 0.13);
 	border-radius: 8px;
 	color: var(--text);
 	font-size: 14px;
@@ -734,7 +734,7 @@ a.btn.ghost.small[href="custom.html"] i {
 	border-color: var(--accent);
 	background: rgba(124, 58, 237, 0.1);
 	transform: translateY(-2px);
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 12px rgba(139, 92, 246, 0.2);
 }
 
 .match-item[data-length="4"] {
@@ -2123,14 +2123,14 @@ a.btn.ghost.small { min-height: 44px !important; display: inline-flex; align-ite
     align-items: center; 
     justify-content: center; 
     font-size: 12px !important; 
-    color: #ef4444 !important; 
-    border-color: rgba(239, 68, 68, 0.3) !important; 
-    background: rgba(239, 68, 68, 0.05) !important; 
+    color: #fb7185 !important; 
+    border-color: rgba(251, 113, 133, 0.3) !important; 
+    background: rgba(251, 113, 133, 0.05) !important; 
 }
 .history-clear:hover { 
-    background: rgba(239, 68, 68, 0.15) !important; 
-    border-color: rgba(239, 68, 68, 0.5) !important; 
-    color: #f87171 !important; 
+    background: rgba(251, 113, 133, 0.15) !important; 
+    border-color: rgba(251, 113, 133, 0.5) !important; 
+    color: #fda4af !important; 
 }
 .history-item { min-height: 44px; }
 .pill { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px !important; }
