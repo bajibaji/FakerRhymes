@@ -4,8 +4,9 @@
 
 **废壳韵脚生成器 (FakerRhymes)** 是一款专为说唱歌手、词曲作者、写诗爱好者、创意文案人打造的中文韵脚生成网页工具。它能自动分析你输入的汉字，秒级提供海量押韵候选词。无论是工整 of 对仗，还是自由的双押、三押、多押，它都能带你起飞！
 
-# 在线使用入口：**[fuckrapper.online](http://fuckrapper.online)**
+# 在线使用入口：**[fuckrapper.online](https://fuckrapper.online)**
 
+# 备用网站：*[Github](https://bajibaji.github.io/FakerRhymes/))*
 ---
 
 ## 页面截图实测
