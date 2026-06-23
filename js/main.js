@@ -2026,10 +2026,12 @@ const devLog = (...args) => {
 				// 第一列：原字
 				const td1 = document.createElement('td');
 				td1.textContent = i.char;
+				td1.setAttribute('data-label', '原字');
 				tr.appendChild(td1);
 				
 				// 第二列：拼音
 				const td2 = document.createElement('td');
+				td2.setAttribute('data-label', '拼音');
 				const pinyinText = document.createElement('div');
 				pinyinText.className = 'raw-pinyin';
 				pinyinText.textContent = i.raw || '-';
@@ -2066,10 +2068,12 @@ const devLog = (...args) => {
 				// 第三列：声调
 				const td3 = document.createElement('td');
 				td3.textContent = i.tone || '-';
+				td3.setAttribute('data-label', '声调');
 				tr.appendChild(td3);
 				
 				// 第四列：韵母+声调控制
 				const td4 = document.createElement('td');
+				td4.setAttribute('data-label', '选择韵母');
 				
 				// 韵母输入框（可编辑）
 				const finInput = document.createElement('input');
@@ -2165,6 +2169,9 @@ const devLog = (...args) => {
 				btn.append(indexSpan, textSpan);
 				btn.addEventListener('click', () => {
 					sourceInput.value = item;
+					if (window.handleClearBtnVisibility) {
+						window.handleClearBtnVisibility();
+					}
 					sourceInput.blur();
 					process();
 				});
@@ -2407,12 +2414,14 @@ const devLog = (...args) => {
 				localStorage.setItem('AI_MODE', isAi);
 				if (isAi && !localStorage.getItem('GEMINI_API_KEY')) {
 					aiSettingsModal.classList.add('active');
+					aiSettingsModal.setAttribute('aria-hidden', 'false');
 				}
 			});
 
 			// Modal Logic
 			openAiSettingsBtn.addEventListener('click', () => {
 				aiSettingsModal.classList.add('active');
+				aiSettingsModal.setAttribute('aria-hidden', 'false');
 				if (aiTestStatus) {
 					aiTestStatus.textContent = '';
 				}
@@ -2420,6 +2429,7 @@ const devLog = (...args) => {
 
 			const closeModal = () => {
 				aiSettingsModal.classList.remove('active');
+				aiSettingsModal.setAttribute('aria-hidden', 'true');
 			};
 
 			closeAiSettingsBtn.addEventListener('click', closeModal);
@@ -2508,6 +2518,54 @@ const devLog = (...args) => {
 			
 			// 立即加载优化字典
 			loadDict();
+
+			// 一键清空输入框逻辑
+			const clearSourceBtn = document.getElementById('clearSourceBtn');
+			const handleClearBtnVisibility = () => {
+				if (clearSourceBtn) {
+					if (sourceInput.value.length > 0) {
+						clearSourceBtn.classList.add('show');
+					} else {
+						clearSourceBtn.classList.remove('show');
+					}
+				}
+			};
+
+			window.handleClearBtnVisibility = handleClearBtnVisibility;
+			sourceInput.addEventListener('input', handleClearBtnVisibility);
+			// 首次载入或重置时检测
+			handleClearBtnVisibility();
+
+			if (clearSourceBtn) {
+				clearSourceBtn.addEventListener('click', () => {
+					sourceInput.value = '';
+					clearSourceBtn.classList.remove('show');
+					
+					// 清空详情调音列表
+					const body = document.getElementById('detailBody');
+					if (body) body.innerHTML = '';
+					
+					// 清空押韵展示
+					const output = document.getElementById('output');
+					if (output) output.innerHTML = '';
+					
+					// 隐藏降级及提示框
+					const noResultActions = document.getElementById('noResultActions');
+					if (noResultActions) noResultActions.style.display = 'none';
+					const matchedResults = document.getElementById('matchedResults');
+					if (matchedResults) matchedResults.style.display = 'none';
+					
+					// 重设缓存结果
+					currentDictResult = null;
+					
+					// 停止并清理动画
+					if (window.stopAllRhymeAnimations) {
+						window.stopAllRhymeAnimations();
+					}
+					
+					sourceInput.focus();
+				});
+			}
 
 			// 启动页面基础动画
 			if (window.startMainAnimations) {

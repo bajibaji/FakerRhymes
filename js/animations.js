@@ -169,7 +169,35 @@ function triggerResultAnimation(isIncremental = false) {
     const itemsToAnimate = forceAll ? allSpans : allSpans.filter(el => el.dataset.shown !== 'true');
     if (itemsToAnimate.length === 0) return;
 
-    // 仅重置新元素的初始状态，不要触碰已显示的元素！
+    // 优先使用 GSAP 实现有阻尼弹性的 stagger 缓入动画
+    if (window.gsap) {
+      itemsToAnimate.forEach(el => {
+        if (!el.dataset.targetOpacity) {
+          const inlineOpacity = el.style.opacity;
+          el.dataset.targetOpacity = inlineOpacity && inlineOpacity !== '0' ? inlineOpacity : '1';
+        }
+        el.style.display = 'inline-block';
+        el.dataset.shown = 'true';
+      });
+
+      window.gsap.fromTo(itemsToAnimate,
+        { opacity: 0, y: 15, scale: 0.95, filter: 'blur(5px)' },
+        {
+          opacity: (i, el) => el.dataset.targetOpacity,
+          y: 0,
+          scale: 1,
+          filter: 'blur(0px)',
+          duration: 0.45,
+          ease: 'power2.out',
+          stagger: {
+            each: Math.max(0.01, Math.min(0.04, 0.8 / allSpans.length))
+          }
+        }
+      );
+      return;
+    }
+
+    // 降级：仅重置新元素的初始状态，不要触碰已显示的元素！
     itemsToAnimate.forEach(el => {
       if (!el.dataset.targetOpacity) {
         const inlineOpacity = el.style.opacity;
@@ -216,13 +244,49 @@ function triggerResultAnimation(isIncremental = false) {
   // 3. 使用 MutationObserver 增量处理未来加入的节点 (AI 模式或后续追加)
   if (!window._rhymeObs) {
     window._rhymeObs = new MutationObserver((mutations) => {
-      // 只要有新节点加入，就执行一次“增量动画”
       const hasNewNodes = mutations.some(m => m.addedNodes.length > 0);
       if (hasNewNodes) {
         animateElements(false);
       }
     });
     window._rhymeObs.observe(output, { childList: true });
+  }
+
+  // 4. 新增：监听 `matchedResultsList` 气泡的载入，赋予 stagger 动效
+  const matchedList = document.getElementById('matchedResultsList');
+  if (matchedList && !window._matchedListObs) {
+    window._matchedListObs = new MutationObserver((mutations) => {
+      const addedNodes = [];
+      mutations.forEach(m => {
+        m.addedNodes.forEach(node => {
+          if (node.classList && node.classList.contains('match-item')) {
+            addedNodes.push(node);
+          }
+        });
+      });
+      
+      if (addedNodes.length > 0) {
+        if (window.gsap) {
+          window.gsap.fromTo(addedNodes, 
+            { opacity: 0, y: 15, scale: 0.95 },
+            { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'back.out(1.2)', stagger: 0.005 }
+          );
+        } else {
+          // 降级使用 CSS 延迟动画
+          addedNodes.forEach((node, i) => {
+            node.style.opacity = '0';
+            node.style.transform = 'translateY(10px) scale(0.95)';
+            node.style.transition = 'none';
+            setTimeout(() => {
+              node.style.transition = 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+              node.style.opacity = '1';
+              node.style.transform = 'translateY(0) scale(1)';
+            }, i * 15);
+          });
+        }
+      }
+    });
+    window._matchedListObs.observe(matchedList, { childList: true });
   }
 }
 
@@ -232,11 +296,18 @@ function stopAllRhymeAnimations() {
     window._rhymeTimers.forEach(clearTimeout);
     window._rhymeTimers = [];
   }
-  // 不再清空内容，防止高度塌陷
-  // const output = document.getElementById('output');
-  // if (output) {
-  //   output.innerHTML = '';
-  // }
+  
+  const output = document.getElementById('output');
+  if (output && window.gsap) {
+    const allSpans = Array.from(output.querySelectorAll('span'));
+    window.gsap.killTweensOf(allSpans);
+  }
+  
+  const matchedList = document.getElementById('matchedResultsList');
+  if (matchedList && window.gsap) {
+    const allItems = Array.from(matchedList.querySelectorAll('.match-item'));
+    window.gsap.killTweensOf(allItems);
+  }
 }
 
 // 暴露接口

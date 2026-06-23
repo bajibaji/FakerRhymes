@@ -5,8 +5,10 @@ const helpTriggerBtn = document.getElementById('helpTriggerBtn');
 		function toggleHelpModal(show) {
 			if (show) {
 				helpModalOverlay.classList.add('active');
+				helpModalOverlay.setAttribute('aria-hidden', 'false');
 			} else {
 				helpModalOverlay.classList.remove('active');
+				helpModalOverlay.setAttribute('aria-hidden', 'true');
 			}
 		}
 
