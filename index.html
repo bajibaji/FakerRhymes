@@ -4,8 +4,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-	<title>废壳韵脚生成器</title>
-	<script src="js/version.js?v=2.4.0"></script>
+	<title>废壳韵脚生成器 v2.4.2</title>
 	<link rel="preconnect" href="https://unpkg.com" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,14 +14,13 @@
 	<link href="https://cdn.jsdelivr.net/npm/remixicon@4.1.0/fonts/remixicon.css" rel="stylesheet" />
 	<link rel="icon" type="image/svg+xml" href="icon.svg" />
 	<link rel="manifest" href="manifest.json" />
-	<link rel="stylesheet" href="css/style.css?v=2.4.0" />
+	<link rel="stylesheet" href="css/style.css?v=2.4.2" />
 </head>
 
 <body>
 	<!-- 屏幕顶部加载进度条 -->
 	<div id="topProgressBar" class="top-progress-bar" style="width:0%"></div>
-	<!-- 粒子背景画布 -->
-	<canvas id="particles-canvas"></canvas>
+
 
 	<div class="bg-blob blob-1"></div>
 	<div class="bg-blob blob-2"></div>
@@ -30,7 +28,7 @@
 
 	<div class="shell">
 		<header>
-			<h1>废壳韵脚生成器 <span style="font-size: 0.5em;">[网页版]</span></h1>
+			<h1>废壳韵脚生成器 v2.4.2 <span style="font-size: 0.5em;">[网页版]</span></h1>
 			<p class="credit">©TRUEPEAK 2026 - DEVELOPED BY DANJUAN </p>
 			<p class="subtitle">输入词语，自动生成同调同韵的押韵词，直接飞升成为顶级说唱歌手</p>
 		</header>
@@ -287,10 +285,24 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer
 		onerror="console.warn('GSAP CDN加载失败')"></script>
 
-	<script src="./js/animations.js?v=2.4.0" defer></script>
-	<script src="./js/main.js?v=2.4.0" defer></script>
-	<script src="./js/sw-init.js?v=2.4.0" defer></script>
-	<script src="./js/help-modal.js?v=2.4.0" defer></script>
+	<script src="./js/animations.js?v=2.4.2" defer></script>
+	<script src="./js/main.js?v=2.4.2" defer></script>
+	<script>
+		if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+			window.addEventListener('load', () => {
+				navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' })
+					.then(reg => {
+						reg.update().catch(() => {});
+						reg.addEventListener('updatefound', () => {
+							const w = reg.installing;
+							if (w) w.addEventListener('statechange', () => {
+								if (w.state === 'activated') window.location.reload();
+							});
+						});
+					}).catch(err => console.warn('SW registration failed', err));
+			});
+		}
+	</script>
 </body>
 
 </html>

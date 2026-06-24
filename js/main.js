@@ -29,6 +29,90 @@ const devLog = (...args) => {
 			console.log('[Dev]', ...args);
 		};
 
+		const showToast = (msg) => {
+			let toast = document.getElementById('toast-tip');
+			if (!toast) {
+				toast = document.createElement('div');
+				toast.id = 'toast-tip';
+				toast.style.cssText = `
+					position: fixed;
+					bottom: 30px;
+					left: 50%;
+					transform: translateX(-50%);
+					background: rgba(15, 23, 42, 0.95);
+					border: 1px solid rgba(124, 58, 237, 0.4);
+					color: #f1f5f9;
+					padding: 10px 20px;
+					border-radius: 12px;
+					font-size: 14px;
+					z-index: 99999;
+					box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+					pointer-events: none;
+					opacity: 0;
+					transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+				`;
+				document.body.appendChild(toast);
+			}
+			toast.textContent = msg;
+			toast.style.opacity = '1';
+			toast.style.transform = 'translateX(-50%) translateY(-5px)';
+			
+			clearTimeout(window._toastTimer);
+			window._toastTimer = setTimeout(() => {
+				toast.style.opacity = '0';
+				toast.style.transform = 'translateX(-50%) translateY(0)';
+			}, 1500);
+		};
+
+		const copyToClipboard = (text) => {
+			try {
+				window.focus();
+			} catch (e) {}
+
+			// 1. 优先尝试同步的 textarea 方案（在用户点击事件中极具鲁棒性，即便失焦或无 Clipboard API 也可成功）
+			const textarea = document.createElement('textarea');
+			textarea.value = text;
+			textarea.setAttribute('readonly', ''); // 阻止 iOS 键盘弹出
+			textarea.style.position = 'fixed';
+			textarea.style.top = '0';
+			textarea.style.left = '-9999px';
+			document.body.appendChild(textarea);
+
+			if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
+				const range = document.createRange();
+				range.selectNodeContents(textarea);
+				const selection = window.getSelection();
+				selection.removeAllRanges();
+				selection.addRange(range);
+				textarea.setSelectionRange(0, 999999);
+			} else {
+				textarea.select();
+			}
+
+			let success = false;
+			try {
+				success = document.execCommand('copy');
+			} catch (err) {
+				console.warn('execCommand copy failed:', err);
+			}
+			document.body.removeChild(textarea);
+
+			if (success) {
+				showToast(`已复制：${text}`);
+				return;
+			}
+
+			// 2. 如果同步复制失败（例如未来浏览器彻底移除了 execCommand），则降级使用现代异步 Clipboard API
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(text)
+					.then(() => showToast(`已复制：${text}`))
+					.catch(() => showToast('复制失败'));
+			} else {
+				showToast('复制失败');
+			}
+		};
+
+
 		const cdnList = [
 			'https://unpkg.com/pinyin-pro@3.27.0/dist/index.js',
 			'https://cdn.jsdelivr.net/npm/pinyin-pro@3.27.0/dist/index.js',
@@ -2253,19 +2337,28 @@ const devLog = (...args) => {
 						div.dataset.length = displayPhrase.length;
 						
 						if (customSet.has(phrase)) {
+							div.classList.add('is-custom');
 							div.style.color = '#4ade80'; // 自定义词：草绿色
 							div.style.borderColor = 'rgba(74, 222, 128, 0.4)';
 							div.style.background = 'rgba(74, 222, 128, 0.08)';
+							div.style.setProperty('--hover-glow', 'rgba(74, 222, 128, 0.35)');
+							div.style.setProperty('--hover-glow-fade', 'rgba(74, 222, 128, 0.25)');
+							div.style.setProperty('--hover-border', 'rgba(74, 222, 128, 0.6)');
+							div.style.setProperty('--hover-bg', 'rgba(74, 222, 128, 0.25)');
 							div.title = '自定义词库词汇';
 						} else if (isLyric) {
+							div.classList.add('is-lyric');
 							div.style.color = '#f472b6'; // 淡粉色
 							div.style.borderColor = 'rgba(244, 114, 182, 0.4)';
 							div.style.background = 'rgba(244, 114, 182, 0.08)';
+							div.style.setProperty('--hover-glow', 'rgba(244, 114, 182, 0.35)');
+							div.style.setProperty('--hover-glow-fade', 'rgba(244, 114, 182, 0.25)');
+							div.style.setProperty('--hover-border', 'rgba(244, 114, 182, 0.6)');
+							div.style.setProperty('--hover-bg', 'rgba(244, 114, 182, 0.25)');
 							div.title = '歌词语料词汇';
 						}
 						div.addEventListener('click', () => {
-							document.getElementById('source').value = displayPhrase;
-							process();
+							copyToClipboard(displayPhrase);
 						});
 						matchedResultsList.appendChild(div);
 						hasContent = true;
@@ -3196,3 +3289,41 @@ const devLog = (...args) => {
 		};
 
 		init();
+
+		// ponytail: help-modal combined from help-modal.js
+		(function() {
+			const helpTriggerBtn = document.getElementById('helpTriggerBtn');
+			const helpModalOverlay = document.getElementById('helpModalOverlay');
+			const helpCloseBtn = document.getElementById('helpCloseBtn');
+			if (!helpTriggerBtn || !helpModalOverlay || !helpCloseBtn) return;
+
+			function toggleHelpModal(show) {
+				if (show) {
+					helpModalOverlay.classList.add('active');
+					helpModalOverlay.setAttribute('aria-hidden', 'false');
+				} else {
+					helpModalOverlay.classList.remove('active');
+					helpModalOverlay.setAttribute('aria-hidden', 'true');
+				}
+			}
+
+			// 首次访问自动弹出使用说明
+			const HELP_SHOWN_KEY = 'fakerrhymes_help_shown';
+			if (!localStorage.getItem(HELP_SHOWN_KEY)) {
+				toggleHelpModal(true);
+				localStorage.setItem(HELP_SHOWN_KEY, '1');
+			}
+
+			helpTriggerBtn.addEventListener('click', () => toggleHelpModal(true));
+			helpCloseBtn.addEventListener('click', () => toggleHelpModal(false));
+			
+			helpModalOverlay.addEventListener('click', (e) => {
+				if (e.target === helpModalOverlay) toggleHelpModal(false);
+			});
+			
+			document.addEventListener('keydown', (e) => {
+				if (e.key === 'Escape' && helpModalOverlay.classList.contains('active')) {
+					toggleHelpModal(false);
+				}
+			});
+		})();

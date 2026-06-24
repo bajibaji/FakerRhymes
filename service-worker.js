@@ -1,7 +1,5 @@
-// Version: v2.4.0
-importScripts('./js/version.js');
-
-const CACHE_VERSION = typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'dev';
+// Version: v2.4.2
+const CACHE_VERSION = 'v2.4.2';
 const CACHE_NAME = 'fakerhymes-cache-' + CACHE_VERSION;
 const APP_ROOT = new URL('./', self.location.href);
 const ASSET_PATHS = [
@@ -10,10 +8,7 @@ const ASSET_PATHS = [
   './custom.html',
   './css/style.css',
   './js/main.js',
-  './js/version.js',
   './js/animations.js',
-  './js/help-modal.js',
-  './js/sw-init.js',
   './js/pkg/wasm_search.js',
   './js/pkg/wasm_search_bg.wasm',
   './manifest.json',

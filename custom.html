@@ -280,36 +280,36 @@
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
 
       tl.from(".shell", {
-        y: 30,
+        y: 25,
         opacity: 0,
-        duration: 1.2,
+        duration: 1.0,
         clearProps: "all"
       })
       .from("h1", {
-        y: 20,
+        y: 15,
         opacity: 0,
-        duration: 0.8
-      }, "-=0.8")
+        duration: 0.6
+      }, "-=0.7")
       .from(".subtitle", {
         y: 10,
         opacity: 0,
-        duration: 0.8
-      }, "-=0.6")
+        duration: 0.6
+      }, "-=0.5")
       .from(".controls-stack .btn", {
         y: 20,
         opacity: 0,
-        duration: 0.6,
+        duration: 0.5,
         stagger: 0.1
-      }, "-=0.6")
+      }, "-=0.5")
       .from(".bottom-actions", {
-        y: 20,
+        y: 15,
         opacity: 0,
-        duration: 0.8
+        duration: 0.6
       }, "-=0.4")
       .from(".list-container", {
         opacity: 0,
-        y: 20,
-        duration: 0.8
+        y: 15,
+        duration: 0.6
       }, "-=0.4");
 
       // 3. Interactive Elements
