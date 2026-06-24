@@ -567,7 +567,9 @@ const devLog = (...args) => {
 
 		const registerBank = () => {
 			if (!window.pinyinPro || !window.pinyinPro.pinyin) return new Map();
-			const source = typeof window.getRhymeBank === 'function' ? window.getRhymeBank() : window.RHYME_CHAR_BANK || [];
+			const customList = readList('CUSTOM_RHYME_BANK').filter(Boolean);
+			const onlineList = readList('ONLINE_DICT_CACHE').filter(Boolean);
+			const source = Array.from(new Set([...customList, ...onlineList]));
 			const map = new Map();
 			for (const item of source) {
 				// 将多字词拆成单个字符
